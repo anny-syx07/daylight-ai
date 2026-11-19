@@ -2,9 +2,13 @@
 
 A calm personal study PWA: Canvas LMS, school Outlook, deadlines and reminders.
 
-Live app: **https://daylight-ai-three.vercel.app** · Vercel Hobby + Neon Free.
+[**☀️ Mở Daylight AI online**](https://daylight-ai-three.vercel.app) · Vercel Hobby + Neon Free.
 
-Step-by-step connection help: **https://daylight-ai-three.vercel.app/huong-dan**. Canvas and Outlook instructions include direct new-tab links, a copyable Microsoft redirect URI, and school IT troubleshooting. The same help is linked from sign-in, connection cards and the Canvas token dialog.
+[**📖 Hướng dẫn Canvas & Outlook từng bước**](https://daylight-ai-three.vercel.app/huong-dan) · [Canvas](https://daylight-ai-three.vercel.app/huong-dan#canvas) · [Outlook](https://daylight-ai-three.vercel.app/huong-dan#outlook).
+
+The live app is reachable online; the study workspace is protected by its owner's Daylight password. This MVP currently has **one shared owner workspace**, not separate accounts for visitors. Do not give visitors the owner's password to set up their own Canvas or Outlook: they would share the same data. Independent user accounts are not enabled yet.
+
+Canvas and Outlook instructions include direct new-tab links, a copyable Microsoft redirect URI, and school IT troubleshooting. The same help is linked from sign-in, connection cards and the Canvas token dialog.
 
 ```sh
 npm ci
