@@ -8,7 +8,7 @@ const directory = mkdtempSync(join(tmpdir(), 'daylight-test-'));
 process.env.DATA_DIR = directory;
 process.env.STORE_NAMESPACE = `test-security:${Date.now()}:`;
 const store = await import('../server/store.js');
-const { pages, safeUrl, normalizeCanvasToken, validateCanvas, publicError } = await import('../server/connectors.js');
+const { pages, safeUrl, normalizeCanvasToken, validateCanvas, publicError, canvasModuleFiles, canvasResourceWarning, ProviderError } = await import('../server/connectors.js');
 const { inQuietHours, reminderWindow, defaultSettings } = await import('../server/reminders.js');
 test('AES-GCM encrypts secrets and rejects tampering', () => {
   const token = 'synthetic-test-value';
@@ -101,5 +101,32 @@ test('reminders never invent due dates or notify completed/overdue/non-task item
   assert.equal(reminderWindow({ ...item, allDay: true }, now), null);
   assert.equal(reminderWindow({ ...item, due: new Date(now - 1).toISOString() }, now), null);
   assert.equal(reminderWindow({ ...item, kind: 'mail' }, now), null);
+});
+test('Canvas file fallback uses module metadata and respects locks and pagination', async () => {
+  const requests: string[] = [];
+  const fetcher = (async (input: string | URL | Request) => {
+    const url = String(input); requests.push(url);
+    if (url.includes('/modules?')) return new Response(JSON.stringify([
+      { id: 1, state: 'locked', items_count: 1, items: [{ id: 1, type: 'File', content_id: 20 }] },
+      { id: 2, state: 'unlocked', items_count: 3 },
+    ]));
+    if (url.includes('page=2')) return new Response(JSON.stringify([{ id: 33, type: 'File', content_id: 23, title: 'Allowed two' }]));
+    return new Response(JSON.stringify([
+      { id: 31, type: 'File', content_id: 21, title: 'Allowed one' },
+      { id: 32, type: 'File', content_id: 22, content_details: { locked_for_user: true } },
+    ]), { headers: { Link: '<https://umthcm.instructure.com/api/v1/courses/12/modules/2/items?page=2>; rel="next"' } });
+  }) as typeof fetch;
+  const items = await canvasModuleFiles(12, 'Test course', 'synthetic', fetcher);
+  assert.equal(items.length, 2);
+  assert.equal(items[0].id, 'canvas:file:12:21');
+  assert.equal(items[0].url, 'https://umthcm.instructure.com/courses/12/modules/items/31');
+  assert.equal(items[0].due, null);
+  assert.equal(requests.length, 3);
+  assert.ok(requests.every(url => !url.includes('/files')));
+});
+test('Canvas quiz 404 describes partial sync without claiming all quizzes or token failure', () => {
+  assert.match(canvasResourceWarning('Test', 'quiz', new ProviderError(404), true), /chưa xác nhận đủ mọi quiz/);
+  assert.match(canvasResourceWarning('Test', 'quiz', new ProviderError(404), false), /chưa tải xong/);
+  assert.match(canvasResourceWarning('Test', 'file', new ProviderError(403), true), /chưa cho liệt kê/);
 });
 test.after(() => { store.db?.close(); rmSync(directory, { recursive: true, force: true }); });

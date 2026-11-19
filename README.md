@@ -22,6 +22,8 @@ For free hosting, use [Vercel + Neon setup](VERCEL.md). For a continuously runni
 
 The UI uses locally bundled Nunito with Vietnamese support for a softer, more readable study space.
 
+Canvas sync preserves successful partitions when one endpoint fails. If course-file listing returns 403/404, the connector separately collects file links from readable, unlocked modules; it does not download file content or bypass Canvas access checks. Quiz 404 warnings explain that assignment-based quiz data is retained without claiming every quiz is present.
+
 ### Use without a Microsoft app registration
 
 Open **Connections → Đưa thư và lịch về Daylight**. A private Google Apps Script bridge can send headers and snippets of Gmail messages carrying the `Daylight` label; it requires the owner's Google consent for read-only Gmail, external requests and scheduled triggers. Script code and its manifest are generated inside the authenticated app. The bridge uses its own revocable, encrypted receiving key and never receives a Google refresh token or school password. It sends up to 100 new messages per run from the 1,000 most recent labelled messages within 30 days, approximately every 10 minutes, subject to Google quotas. Forwarding from school Outlook must be permitted and tested; Canvas can also deliver notifications to a verified personal address. [Step-by-step Gmail guide](https://daylight-ai-three.vercel.app/huong-dan#gmail).

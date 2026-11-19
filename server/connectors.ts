@@ -74,7 +74,7 @@ export async function allItems(): Promise<Item[]> {
     const upstream = (await Promise.all(partitions.map(partition => get<Item[]>(`items:${partition}`, [])))).flat();
     const imports = await get<Item[]>('imported', []);
     const liveUrls = new Set(upstream.filter(item => item.url && item.due).map(item => `${item.url}|${item.due}`));
-    return [...upstream, ...imports.filter(item => !item.url || !item.due || !liveUrls.has(`${item.url}|${item.due}`))];
+    return [...new Map(upstream.map(item => [item.id, item])).values(), ...imports.filter(item => !item.url || !item.due || !liveUrls.has(`${item.url}|${item.due}`))];
 }
 async function savePartition(source: Source, partition: string, items: Item[]) {
     await replacePartition(source, partition, items);
@@ -94,6 +94,26 @@ export async function validateCanvas(token: string, fetcher: typeof fetch = fetc
     if (!profile || !Number.isInteger(profile.id) || profile.id <= 0) throw new ProviderError(200, 'canvas', 'response');
     return profile;
 }
+export async function canvasModuleFiles(courseId: number, course: string, token: string, fetcher: typeof fetch = fetch): Promise<Item[]> {
+    if (!Number.isSafeInteger(courseId) || courseId < 1) throw new Error('Invalid course');
+    const modules = await pages(`/api/v1/courses/${courseId}/modules?include[]=items&include[]=content_details&per_page=100`, token, 'canvas', fetcher);
+    const result: Item[] = [];
+    for (const module of modules) {
+        if (!Number.isSafeInteger(module.id) || module.id < 1 || module.state === 'locked' || module.published === false) continue;
+        const items = Array.isArray(module.items) && module.items.length === module.items_count ? module.items : await pages(`/api/v1/courses/${courseId}/modules/${module.id}/items?include[]=content_details&per_page=100`, token, 'canvas', fetcher);
+        for (const item of items) {
+            if (item.type !== 'File' || !Number.isSafeInteger(item.content_id) || item.content_id < 1 || !Number.isSafeInteger(item.id) || item.id < 1 || item.published === false || item.content_details?.locked_for_user === true) continue;
+            result.push({ id: `canvas:file:${courseId}:${item.content_id}`, source: 'canvas', kind: 'file', title: text(item.title || 'Tài liệu trong mô-đun'), course, due: null, url: `${CANVAS}/courses/${courseId}/modules/items/${item.id}`, detail: 'Liên kết tài liệu từ mô-đun được Canvas trả về. Canvas kiểm tra quyền khi bạn mở; Daylight không tải nội dung tệp.' });
+        }
+    }
+    return [...new Map(result.map(item => [item.id, item])).values()];
+}
+export function canvasResourceWarning(course: string, kind: string, error: unknown, assignmentsLoaded: boolean) {
+    if (error instanceof ProviderError && kind === 'file' && [403, 404].includes(error.status)) return `${course} / Tài liệu: Canvas chưa cho liệt kê thư mục tệp (HTTP ${error.status}). Đang dùng liên kết từ mô-đun nếu được cấp quyền; danh sách có thể chưa đủ.`;
+    if (error instanceof ProviderError && kind === 'quiz' && error.status === 404) return `${course} / Quiz: API quiz riêng trả về “không tìm thấy” (404). ${assignmentsLoaded ? 'Đã tải danh sách bài tập và giữ các quiz có trong đó; chưa xác nhận đủ mọi quiz.' : 'Danh sách bài tập cũng chưa tải xong, nên chưa xác nhận được deadline quiz.'} Không cần kết nối lại chỉ vì lỗi này.`;
+    const labels: Record<string, string> = { assignment: 'Bài tập', discussion: 'Thảo luận', announcement: 'Thông báo', grade: 'Điểm', file: 'Tài liệu', quiz: 'Quiz' };
+    return `${course} / ${labels[kind] || kind}: ${publicError(error)}`;
+}
 export async function syncCanvas() {
     const token = await secret('canvas-token');
     if (!token)
@@ -110,6 +130,7 @@ export async function syncCanvas() {
             const courseName = course.name;
             const base = `/api/v1/courses/${course.id}`;
             const assignmentIds = new Set<number>();
+            let assignmentsLoaded = false;
             const resources = [
                 ['assignment', `${base}/assignments?include[]=submission&per_page=100`],
                 ['quiz', `${base}/quizzes?per_page=100`],
@@ -123,9 +144,11 @@ export async function syncCanvas() {
                 activePartitions.add(`canvas:${partition}`);
                 try {
                     const values = await pages(path, token, 'canvas');
-                    if (kind === 'assignment')
+                    if (kind === 'assignment') {
+                        assignmentsLoaded = true;
                         for (const value of values)
                             assignmentIds.add(value.id);
+                    }
                     await savePartition('canvas', partition, values.filter(value => (kind !== 'discussion' || !value.is_announcement) && (!['quiz', 'discussion'].includes(kind) || !assignmentIds.has(value.assignment_id))).map(value => ({
                         id: `canvas:${kind}:${course.id}:${value.id}`, source: 'canvas', kind: kind === 'assignment' && value.is_quiz_assignment ? 'quiz' : kind === 'assignment' && value.discussion_topic ? 'discussion' : kind, course: courseName,
                         title: kind === 'grade' ? `${courseName} · Điểm hiện tại` : text(value.name || value.title || value.display_name || 'Chưa có tiêu đề'),
@@ -136,7 +159,13 @@ export async function syncCanvas() {
                     })));
                 }
                 catch (error) {
-                    warnings.push(`${courseName} / ${kind}: ${publicError(error)}`);
+                    warnings.push(canvasResourceWarning(courseName, kind, error, assignmentsLoaded));
+                    if (kind === 'file' && error instanceof ProviderError && [403, 404].includes(error.status)) {
+                        const fallback = `${course.id}:module-files`;
+                        activePartitions.add(`canvas:${fallback}`);
+                        try { await savePartition('canvas', fallback, await canvasModuleFiles(course.id, courseName, token)); }
+                        catch { warnings.push(`${courseName} / Mô-đun: chưa lấy được liên kết tài liệu thay thế. Những mục khác vẫn dùng bình thường.`); }
+                    }
                 }
             }
         }
