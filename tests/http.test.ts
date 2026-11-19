@@ -50,6 +50,14 @@ test('private API requires session and exact Origin; task changes persist and lo
     assert.equal((await fetch(`${origin}/api/push`, { method: 'POST', headers, body: JSON.stringify({ endpoint: 'https://127.0.0.1/private', keys: { auth: 'test', p256dh: 'test' } }) })).status, 400);
     await fetch(`${origin}/api/tasks/${encodeURIComponent(task.id)}`, { method: 'DELETE', headers });
     assert.deepEqual((await (await fetch(`${origin}/api/dashboard`, { headers })).json()).items, []);
+    const classResponse = await fetch(`${origin}/api/tasks`, { method: 'POST', headers, body: JSON.stringify({ title: 'Test class', kind: 'event', course: 'Test', due: '2026-12-01T02:00:00Z' }) });
+    const lesson = await classResponse.json();
+    assert.equal(classResponse.status, 200);
+    assert.equal(lesson.kind, 'event');
+    assert.equal(lesson.due, '2026-12-01T02:00:00.000Z');
+    assert.equal((await fetch(`${origin}/api/tasks`, { method: 'POST', headers, body: JSON.stringify({ title: 'Missing class time', kind: 'event' }) })).status, 400);
+    assert.equal((await fetch(`${origin}/api/tasks`, { method: 'POST', headers, body: JSON.stringify({ title: 'Wrong kind', kind: 'grade' }) })).status, 400);
+    await fetch(`${origin}/api/tasks/${encodeURIComponent(lesson.id)}`, { method: 'DELETE', headers });
     assert.equal((await fetch(`${origin}/api/imports/gmail/receive`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: [] }) })).status, 401);
     assert.equal((await fetch(`${origin}/api/imports/gmail/setup`, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin }, body: '{}' })).status, 401);
     assert.equal((await fetch(`${origin}/api/imports/gmail/setup`, { method: 'POST', headers: { ...headers, Origin: 'https://evil.example' }, body: '{}' })).status, 403);

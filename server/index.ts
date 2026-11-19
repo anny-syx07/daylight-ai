@@ -171,11 +171,12 @@ app.get('/api/oauth/microsoft', async (request, response) => {
 });
 app.post('/api/tasks', async (request, response) => {
     const { title, due, course } = request.body;
-    if (typeof title !== 'string' || !title.trim() || title.length > 300 || (due && !Number.isFinite(Date.parse(due)))) {
+    const kind = request.body.kind || 'task';
+    if (typeof title !== 'string' || !title.trim() || title.length > 300 || !['task', 'assignment', 'quiz', 'event'].includes(kind) || (due && (typeof due !== 'string' || !Number.isFinite(Date.parse(due)))) || (kind === 'event' && !due)) {
         response.status(400).json({ error: 'Kiểm tra tên và thời hạn.' });
         return;
     }
-    const item: Item = { id: `manual:${randomBytes(12).toString('hex')}`, source: 'manual', kind: 'task', title: title.trim(), due: due ? new Date(due).toISOString() : null, course: typeof course === 'string' ? course.slice(0, 100) : 'Cá nhân' };
+    const item: Item = { id: `manual:${randomBytes(12).toString('hex')}`, source: 'manual', kind, title: title.trim(), due: due ? new Date(due).toISOString() : null, course: typeof course === 'string' ? course.slice(0, 100) : 'Cá nhân' };
     await update<Item[]>('manual', [], items => [...items, item]);
     response.json(item);
 });
