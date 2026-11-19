@@ -11,15 +11,16 @@ test('private API requires session and exact Origin; task changes persist and lo
   const port = 31000 + Math.floor(Math.random() * 10000);
   const origin = `http://127.0.0.1:${port}`;
   const password = 'synthetic-test-password-only';
-  const child = spawn(process.execPath, ['--import', 'tsx', 'server/index.ts'], { env: { ...process.env, NODE_ENV: 'test', PORT: String(port), APP_ORIGIN: origin, APP_PASSWORD: password, DATA_DIR: directory, MS_CLIENT_ID: '', MS_CLIENT_SECRET: '' }, stdio: 'ignore' });
+  const child = spawn(process.execPath, ['--import', 'tsx', 'server/index.ts'], { env: { ...process.env, VERCEL: '', STORE_NAMESPACE: `test-http:${Date.now()}:`, NODE_ENV: 'test', PORT: String(port), APP_ORIGIN: origin, APP_PASSWORD: password, DATA_DIR: directory, MS_CLIENT_ID: '', MS_CLIENT_SECRET: '' }, stdio: 'ignore' });
   try {
     let ready = false;
-    for (let attempt = 0; attempt < 60; attempt++) {
+    for (let attempt = 0; attempt < 200; attempt++) {
       try { if ((await fetch(`${origin}/api/health`)).ok) { ready = true; break; } } catch {}
       await delay(100);
     }
     assert.ok(ready, 'server starts');
     assert.equal((await fetch(`${origin}/api/dashboard`)).status, 401);
+    assert.equal((await fetch(`${origin}/api/cron`)).status, 401);
     assert.equal((await fetch(`${origin}/api/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) })).status, 403);
     const login = await fetch(`${origin}/api/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin }, body: JSON.stringify({ password }) });
     assert.equal(login.status, 200);

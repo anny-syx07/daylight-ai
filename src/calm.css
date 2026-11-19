@@ -1,0 +1,28 @@
+:root{font-family:'Nunito Variable',ui-rounded,system-ui,sans-serif;font-synthesis:none;font-weight:500}
+h1,h2,h3,.brand{font-weight:750;letter-spacing:-.025em}
+.heading h1{font-size:30px;line-height:1.5}
+.task-title{font-size:15px;font-weight:650;line-height:1.7}
+.task-meta{font-size:12px;color:#847b92;line-height:1.8}
+.task-meta>span:first-child{max-width:260px}
+.subtitle,.hero-copy p,.integration>p,.detail,.setting-row p{font-size:14px;line-height:1.9;color:#857b92}
+.hero-copy h2{font-size:25px;font-weight:750}
+.primary,.secondary,.text-button{font-size:13px;font-weight:750}
+nav button{font-size:14px;font-weight:650}
+.section-heading h2,.connection-card h3{font-size:17px;font-weight:750}
+.section-heading p,.empty-state p,.focus-footer,.caption,.sync-status,.privacy-note{font-size:12px!important;line-height:1.8}
+.empty-state h3{font-size:17px}
+.eyebrow,.mini-label,.workspace-label{font-size:11px;letter-spacing:.08em}
+.stats p{font-size:12px;color:#857b92}.stats small{font-size:11px}.badge{font-size:11px;font-weight:700}
+.badge.assignment,.badge.quiz{background:#f0ebfb;color:#8261a5;border-color:#e5dbf3}
+.badge.event{color:#9c744a;background:#fff1df}
+.notice,.setting-row strong,label{font-size:13px}
+.source-line{font-size:13px}.source-line>span:last-child{font-size:11px}
+.task-row{border-radius:12px;margin:4px 7px;padding:19px 17px}
+.task-row:hover{background:#faf8fe}.check-button{width:22px;height:22px;border-radius:8px}
+.hero-card{border-radius:20px}.panel{border-radius:17px}.primary,.secondary{border-radius:12px}
+.little-note strong{font-size:14px}.little-note p{font-size:12px}.live-state{font-size:12px}
+.calendar-day small{font-size:10px}.day-label{font-size:12px}.toast{font-size:14px}
+[data-theme=dark] .task-meta,[data-theme=dark] .subtitle,[data-theme=dark] .hero-copy p,[data-theme=dark] .integration>p,[data-theme=dark] .detail,[data-theme=dark] .setting-row p{color:#b8adc8}
+[data-theme=dark] .task-row:hover{background:#35303e}
+@media(max-width:950px){.heading h1{font-size:25px}.hero-copy h2{font-size:22px}.stats p{font-size:11px}}
+@media(max-width:700px){.heading h1{font-size:26px}.hero-copy{width:88%}.hero-copy h2{font-size:23px}.hero-copy p{font-size:13px}.sun-art{opacity:.4}.task-title{font-size:14px}.task-meta{font-size:11px}.task-row .badge{font-size:10px}.stats p{font-size:10px}.heading>.primary{font-size:12px}.section-heading p{font-size:12px}.focus-panel>.section-heading{flex-wrap:wrap}.empty-state p{font-size:13px}.eyebrow{font-size:10px}.subtitle{font-size:13px}.stats small{display:none}.page-footer{font-size:10px}}

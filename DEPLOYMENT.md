@@ -1,5 +1,7 @@
 # Daylight AI — run and deploy
 
+For the newer free Vercel + Neon deployment profile, see [VERCEL.md](VERCEL.md). The disk and always-on server requirements below apply to this document's SQLite/Render profile.
+
 ## Open locally
 
 Requires Node 22.18+.

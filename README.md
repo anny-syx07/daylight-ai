@@ -10,7 +10,9 @@ npm run dev
 
 Open **http://localhost:5173**. Requires Node 22.18+. Personal tasks work immediately; source data appears only after connecting your own account. Outlook requires Microsoft app registration.
 
-See [setup, deployment, security and scope](DEPLOYMENT.md) for the Render blueprint, Microsoft permissions, persistence and known limitations.
+For free hosting, use [Vercel + Neon setup](VERCEL.md). For a continuously running server, see [Render setup, security and scope](DEPLOYMENT.md).
+
+The UI uses locally bundled Nunito with Vietnamese support for a softer, more readable study space.
 
 ```sh
 npm test

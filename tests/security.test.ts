@@ -6,6 +6,7 @@ import { join } from 'node:path';
 
 const directory = mkdtempSync(join(tmpdir(), 'daylight-test-'));
 process.env.DATA_DIR = directory;
+process.env.STORE_NAMESPACE = `test-security:${Date.now()}:`;
 const store = await import('../server/store.js');
 const { pages, safeUrl } = await import('../server/connectors.js');
 const { inQuietHours, reminderWindow, defaultSettings } = await import('../server/reminders.js');
@@ -17,6 +18,18 @@ test('AES-GCM encrypts secrets and rejects tampering', () => {
   assert.notEqual(encrypted, store.seal(token));
   const tampered = Buffer.from(encrypted, 'base64'); tampered[13] ^= 1;
   assert.throws(() => store.unseal(tampered.toString('base64')));
+});
+test('concurrent updates retain all tasks and VAPID initialization is stable', async () => {
+  await Promise.all(Array.from({ length: 5 }, (_, index) => store.update<number[]>('test-updates', [], values => [...values, index])));
+  assert.deepEqual((await store.get<number[]>('test-updates', [])).sort(), [0, 1, 2, 3, 4]);
+  const initialized = await Promise.all([store.getOrCreate('test-create', 'one'), store.getOrCreate('test-create', 'two')]);
+  assert.equal(initialized[0], initialized[1]);
+  assert.equal(await store.claim('test-lock', 'first', 10000), true);
+  assert.equal(await store.claim('test-lock', 'second', 10000), false);
+  await store.release('test-lock', 'second');
+  assert.equal(await store.claim('test-lock', 'third', 10000), false);
+  await store.release('test-lock', 'first');
+  assert.equal(await store.claim('test-lock', 'third', 10000), true);
 });
 test('Canvas pagination follows next links and sends bearer only to approved API', async () => {
   const calls: string[] = [];
@@ -60,4 +73,4 @@ test('reminders never invent due dates or notify completed/overdue/non-task item
   assert.equal(reminderWindow({ ...item, due: new Date(now - 1).toISOString() }, now), null);
   assert.equal(reminderWindow({ ...item, kind: 'mail' }, now), null);
 });
-test.after(() => { store.db.close(); rmSync(directory, { recursive: true, force: true }); });
+test.after(() => { store.db?.close(); rmSync(directory, { recursive: true, force: true }); });
