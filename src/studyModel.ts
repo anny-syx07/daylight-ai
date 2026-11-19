@@ -15,7 +15,7 @@ export function studySummary(items: Item[], now = new Date()) {
   const days = Array.from({ length: 7 }, (_, index) => {
     const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() + index);
     const key = dayKey(date);
-    const entries = items.filter(item => itemDayKey(item) === key && !item.completed);
+    const entries = items.filter(item => itemDayKey(item) === key && !item.completed && !item.cancelled);
     return { date, key, assignments: entries.filter(item => isDeadline(item) && item.kind !== 'quiz').length, quizzes: entries.filter(item => item.kind === 'quiz').length, classes: entries.filter(item => item.kind === 'event').length };
   });
   const upcoming = pending.filter(item => item.due && itemDayKey(item) >= today).sort(chronological);
@@ -27,6 +27,6 @@ export function studySummary(items: Item[], now = new Date()) {
     quizzes: pending.filter(item => item.kind === 'quiz').length,
     overdue: pending.filter(item => item.due && itemDayKey(item) < today).sort(chronological),
     undated: pending.filter(item => !item.due),
-    classes: items.filter(item => item.kind === 'event' && item.due && (item.allDay ? itemDayKey(item) >= today : Date.parse(item.due) >= now.getTime())).sort(chronological),
+    classes: items.filter(item => item.kind === 'event' && !item.cancelled && item.due && (item.allDay ? itemDayKey(item) >= today : Date.parse(item.due) >= now.getTime())).sort(chronological),
   };
 }

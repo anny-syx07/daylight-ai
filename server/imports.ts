@@ -4,23 +4,29 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { get, set, secret, seal, remove, update } from './store.js';
 import type { Item, ImportPreview, ImportStatus } from '../src/types.js';
 import { bridgeCode } from './gmail-bridge.js';
+import { parseSisSchedule } from './sis-import.js';
 
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const plain = (value: unknown, limit = 2000) => String(typeof value === 'object' && value && 'val' in value ? value.val : value || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, limit);
 const https = (value: unknown) => { try { const raw = typeof value === 'object' && value && 'val' in value ? value.val : value; const url = new URL(String(raw)); return url.protocol === 'https:' && !url.username && !url.password ? url.href : undefined; } catch { return undefined; } };
 
 export async function parseImport(filename: unknown, encoded: unknown, now = Date.now()): Promise<Omit<ImportPreview, 'id'>> {
-  if (typeof filename !== 'string' || filename.length > 200 || typeof encoded !== 'string' || encoded.length > 1400000 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) throw new Error('Chọn tệp .ics hoặc .eml, tối đa 1 MB.');
+  if (typeof filename !== 'string' || filename.length > 200 || typeof encoded !== 'string' || encoded.length > 1400000 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) throw new Error('Chọn tệp .ics, .eml hoặc .sis.json, tối đa 1 MB.');
   const bytes = Buffer.from(encoded, 'base64');
   if (!bytes.length || bytes.length > 1024 * 1024) throw new Error('Tệp trống hoặc lớn hơn 1 MB.');
   const label = plain(filename, 100);
+  if (/\.sis\.json$/i.test(filename)) {
+    let data: unknown;
+    try { data = JSON.parse(bytes.toString('utf8')); } catch { throw new Error('Tệp SIS không đọc được.'); }
+    return parseSisSchedule(data);
+  }
   if (/\.eml$/i.test(filename)) {
     const email = await PostalMime.parse(bytes);
     if (!email.subject && !email.from?.address) throw new Error('Tệp này không có tiêu đề hoặc người gửi email hợp lệ.');
     const group = `mail:${hash(email.messageId || encoded).slice(0, 32)}`;
     return { group, label, warnings: ['Email được nhập thủ công. Tệp đính kèm không được lưu; deadline cần bạn xác nhận bằng nút Thêm việc.'], items: [{ id: `import:${group}`, source: 'import', kind: 'mail', title: plain(email.subject || '(Không có tiêu đề)', 300), course: plain(email.from?.name || email.from?.address || 'Email nhập tay', 100), due: null, detail: plain(email.text || email.html), importGroup: group, importLabel: 'Email · nhập thủ công' }] };
   }
-  if (!/\.ics$/i.test(filename)) throw new Error('Chỉ hỗ trợ tệp lịch .ics hoặc email .eml.');
+  if (!/\.ics$/i.test(filename)) throw new Error('Chỉ hỗ trợ lịch .ics, email .eml hoặc thời khóa biểu .sis.json.');
   let content = bytes.toString('utf8').replace(/^\uFEFF/, '');
   if (!/^BEGIN:VCALENDAR\s*$/mi.test(content) || !/^END:VCALENDAR\s*$/mi.test(content)) throw new Error('Tệp chưa đúng định dạng lịch iCalendar.');
   if ((content.match(/^BEGIN:VEVENT/igm) || []).length > 1000) throw new Error('Mỗi lần nhập tối đa 1.000 sự kiện gốc.');
@@ -54,7 +60,7 @@ export async function parseImport(filename: unknown, encoded: unknown, now = Dat
       const calendarAssignment = canvasUrl?.pathname === '/calendar' ? canvasUrl.searchParams.get('event')?.match(/^assignment_(\d+)$/) : null;
       const canvasUid = canvasUrl?.pathname === '/calendar' ? event.uid.match(/^event-assignment-(\d+)$/) : null;
       const assignmentId = Number(assignmentMatch?.[1] || calendarAssignment?.[1] || canvasUid?.[1]) || undefined;
-      items.push({ id: `import:${group}:${hash(key).slice(0, 24)}`, source: 'import', kind: assignmentId ? 'assignment' : 'event', title: plain(instance.summary || '(Không có tiêu đề)', 300), course: assignmentId ? 'Canvas · lịch nhập' : 'Lịch nhập tay', due: instance.isFullDay ? `${calendarDate}T12:00:00.000Z` : date, allDay: instance.isFullDay, url, canvasAssignmentId: assignmentId, detail: plain(instance.event.description), importGroup: group, importLabel: 'Lịch .ics · bản chụp thủ công' });
+      items.push({ id: `import:${group}:${hash(key).slice(0, 24)}`, source: 'import', kind: assignmentId ? 'assignment' : 'event', title: plain(instance.summary || '(Không có tiêu đề)', 300), course: assignmentId ? 'Canvas · lịch nhập' : 'Lịch nhập tay', due: instance.isFullDay ? `${calendarDate}T12:00:00.000Z` : date, end: !instance.isFullDay && instance.end && Number.isFinite(instance.end.getTime()) ? instance.end.toISOString() : undefined, location: plain(instance.event.location, 200), allDay: instance.isFullDay, url, canvasAssignmentId: assignmentId, detail: plain(instance.event.description), importGroup: group, importLabel: 'Lịch .ics · bản chụp thủ công' });
     }
   }
   if (Object.values(parsed).some(event => event?.type === 'VTODO')) warnings.push('Mục To-do trong tệp chưa được nhập.');
@@ -76,13 +82,14 @@ export async function commitImport(id: unknown) {
     return next;
   });
   await set('import:last', new Date().toISOString());
+  if (preview.group.startsWith('sis:')) await set('sis:last-import', new Date().toISOString());
   await remove('import:preview');
   return { count: preview.items.length };
 }
 export async function importStatus(): Promise<ImportStatus> {
   const configured = Boolean(await get('gmail:secret', null));
   const items = await get<Item[]>('imported', []);
-  return { count: items.length, gmail: { ...await get('gmail:status', {}), receivedCount: items.filter(item => item.importGroup === 'gmail').length, configured }, lastImported: await get<string | undefined>('import:last', undefined) };
+  return { count: items.length, gmail: { ...await get('gmail:status', {}), receivedCount: items.filter(item => item.importGroup === 'gmail').length, configured }, lastImported: await get<string | undefined>('import:last', undefined), sis: { count: items.filter(item => item.importGroup?.startsWith('sis:')).length, lastImported: await get<string | undefined>('sis:last-import', undefined) } };
 }
 export async function gmailAuthorized(header: string | undefined) {
   const key = await secret('gmail:secret');

@@ -12,7 +12,7 @@ export function inQuietHours(now: Date, settings: typeof defaultSettings) {
     return settings.quietStart === settings.quietEnd ? false : settings.quietStart > settings.quietEnd ? hour >= settings.quietStart || hour < settings.quietEnd : hour >= settings.quietStart && hour < settings.quietEnd;
 }
 export function reminderWindow(item: Item, now: number) {
-    if (!item.due || item.allDay || item.completed || !['task', 'assignment', 'quiz', 'discussion', 'event'].includes(item.kind))
+    if (!item.due || item.allDay || item.completed || item.cancelled || !['task', 'assignment', 'quiz', 'discussion', 'event'].includes(item.kind))
         return null;
     const remaining = Date.parse(item.due) - now;
     return remaining > 0 && remaining <= 3600000 ? '1h' : remaining > 3600000 && remaining <= 86400000 ? '24h' : null;
