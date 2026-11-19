@@ -59,7 +59,7 @@ test('Google minute trigger honors server wake-ups and retries without requiring
   const standalone=reminderClockCode({endpoint:'https://daylight.example/api/imports/gmail/receive',key:'synthetic'});
   assert.ok(!standalone.includes('Gmail.Users'));assert.ok(!standalone.includes('function syncDaylight'));
   runInNewContext(standalone,context);context.setupDaylightReminderClock();
-  assert.equal(triggers.at(-1).name,'tickDaylightReminderClock');assert.equal(requests,4);
+  assert.equal(triggers.at(-1)!.name,'tickDaylightReminderClock');assert.equal(requests,4);
 });
 
 test('sound test only targets registered devices and is throttled; worker explicitly requests sound',async()=>{
