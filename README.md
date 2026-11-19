@@ -6,7 +6,7 @@ A calm personal study PWA: Canvas LMS, Gmail bridge, deadlines and reminders.
 
 [**📖 Hướng dẫn Canvas & Outlook từng bước**](https://daylight-ai-three.vercel.app/huong-dan) · [Canvas](https://daylight-ai-three.vercel.app/huong-dan#canvas) · [Outlook](https://daylight-ai-three.vercel.app/huong-dan#outlook).
 
-Daylight is a **free public beta for UMT students**. Visitors can [create a verified email account](https://daylight-ai-three.vercel.app/app?signup) and connect their own Canvas UMT/Gmail sources in an isolated workspace. The original owner's workspace remains at `/owner` with its existing password; it is never merged into a visitor account. Direct Outlook is unavailable. This release has no generative AI feature.
+Daylight is a **free public beta for students using Canvas**. Visitors can [create a verified email account](https://daylight-ai-three.vercel.app/app?signup) and connect their own Canvas LMS/Gmail sources in an isolated workspace. The original owner's workspace remains at `/owner` with its existing password; it is never merged into a visitor account. Direct Outlook is unavailable. This release has no generative AI feature.
 
 Canvas and Outlook instructions include direct new-tab links, a copyable Microsoft redirect URI, and school IT troubleshooting. The same help is linked from sign-in, connection cards and the Canvas token dialog.
 
@@ -76,3 +76,11 @@ Every new workspace must install its own Google clock for closed-app reminders/a
 Members can erase their Daylight data in Settings, revoking bridges and clearing source tokens, imported items and settings. This preserves the login account and upstream data. Owner data is excluded.
 
 Run npm test for concurrent owner/two-member isolation, callback routing, cross-account mutation and logout checks. Verify real provider auth whenever changing its configuration.
+
+### Connect a school's Canvas
+
+Each workspace stores its own `canvas-origin` alongside the encrypted token. Enter a public HTTPS school Canvas URL, including either an `*.instructure.com` site or a custom domain (for example `canvas.school.edu`). Pasted login/settings paths normalize to the origin; only standard HTTPS port 443 is supported. Tokens must be issued by that exact site and the school must allow API access. Internal/VPN-only sites are unavailable from the hosted app.
+
+Existing connections without `canvas-origin` keep the original UMT origin. No token is migrated to a different school. Profile validation succeeds at the candidate origin before changing the connection. A successful school change clears the former Canvas partitions, completion/snoozes and queued Canvas alerts; Gmail, personal items and explicitly imported snapshots stay intact. Same numeric assignment IDs from different schools do not share imported deadline fallbacks.
+
+Every Canvas socket uses an Undici dispatcher whose DNS lookup accepts only public unicast IPv4/IPv6 answers. The validated addresses are supplied directly to the socket, blocking DNS rebinding and private/metadata/loopback targets; mixed public/private answers are rejected. TLS certificate validation remains enabled. Pagination remains on the chosen origin under `/api/v1/`; redirects are refused. Sync, connection replacement and disconnect share the same workspace-scoped lease. Settings/token/calendar links are derived from the selected school. SIS remains a separate UMT-specific integration.

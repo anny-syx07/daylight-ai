@@ -1,6 +1,6 @@
 # Daylight
 
-> A free beta study PWA for students at UMT, Vietnam. Each user creates a separate account and connects their own sources.
+> A free beta study PWA for students whose schools use Canvas LMS. Each user creates a separate account and connects their own sources.
 
 Daylight combines assignments, quizzes, deadlines, class schedules, messages and Web Push reminders. Dashboard charts reflect saved source data. This release does not include generative AI despite the repository's Daylight AI name.
 
@@ -13,6 +13,6 @@ Daylight combines assignments, quizzes, deadlines, class schedules, messages and
 
 ## Scope and limits
 
-Canvas currently supports umthcm.instructure.com only. Access to particular Canvas resources remains controlled by the university. Gmail uses a user-installed Google Apps Script bridge for messages with the Daylight label; there is no direct Outlook connection yet. The cloud reminder clock must be installed once per workspace. SIS auto-refresh requires the optional local Chrome bridge and an awake, signed-in computer. Imported ICS, EML or SIS snapshots require re-import when changed. Web Push needs permission on each device; iPhone needs a Home Screen installation. Delivery timing and sound depend on the OS, network and free service quotas.
+Canvas supports public HTTPS Canvas LMS sites on instructure.com or a school’s own domain. Users enter their school URL and a token from that same site. API access must be allowed by the school; private-network or VPN-only sites are not supported. Access to particular Canvas resources remains controlled by the university. Gmail uses a user-installed Google Apps Script bridge for messages with the Daylight label; there is no direct Outlook connection yet. The cloud reminder clock must be installed once per workspace. SIS auto-refresh requires the optional local Chrome bridge and an awake, signed-in computer. Imported ICS, EML or SIS snapshots require re-import when changed. Web Push needs permission on each device; iPhone needs a Home Screen installation. Delivery timing and sound depend on the OS, network and free service quotas.
 
 Connect sources inside the authenticated application. Private dashboards and APIs are not public content.

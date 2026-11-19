@@ -56,12 +56,12 @@ export async function parseImport(filename: unknown, encoded: unknown, now = Dat
       const calendarDate = `${instance.start.getFullYear()}-${String(instance.start.getMonth() + 1).padStart(2, '0')}-${String(instance.start.getDate()).padStart(2, '0')}`;
       const key = event.uid + (instance.isRecurring ? `:${instance.event.recurrenceid?.toISOString() || date}` : '');
       const url = https(instance.event.url);
-      const canvasUrl = url && new URL(url).origin === 'https://umthcm.instructure.com' ? new URL(url) : null;
+      const canvasUrl = url ? new URL(url) : null;
       const assignmentMatch = canvasUrl?.pathname.match(/^\/courses\/\d+\/assignments\/(\d+)(?:\/|$)/);
       const calendarAssignment = canvasUrl?.pathname === '/calendar' ? canvasUrl.searchParams.get('event')?.match(/^assignment_(\d+)$/) : null;
       const canvasUid = canvasUrl?.pathname === '/calendar' ? event.uid.match(/^event-assignment-(\d+)$/) : null;
       const assignmentId = Number(assignmentMatch?.[1] || calendarAssignment?.[1] || canvasUid?.[1]) || undefined;
-      items.push({ id: `import:${group}:${hash(key).slice(0, 24)}`, source: 'import', kind: assignmentId ? 'assignment' : 'event', title: plain(instance.summary || '(Không có tiêu đề)', 300), course: assignmentId ? 'Canvas · lịch nhập' : 'Lịch nhập tay', due: instance.isFullDay ? `${calendarDate}T12:00:00.000Z` : date, end: !instance.isFullDay && instance.end && Number.isFinite(instance.end.getTime()) ? instance.end.toISOString() : undefined, location: plain(instance.event.location, 200), allDay: instance.isFullDay, url, canvasAssignmentId: assignmentId, detail: plain(instance.event.description), importGroup: group, importLabel: 'Lịch .ics · bản chụp thủ công' });
+      items.push({ id: `import:${group}:${hash(key).slice(0, 24)}`, source: 'import', kind: assignmentId ? 'assignment' : 'event', title: plain(instance.summary || '(Không có tiêu đề)', 300), course: assignmentId ? 'Canvas · lịch nhập' : 'Lịch nhập tay', due: instance.isFullDay ? `${calendarDate}T12:00:00.000Z` : date, end: !instance.isFullDay && instance.end && Number.isFinite(instance.end.getTime()) ? instance.end.toISOString() : undefined, location: plain(instance.event.location, 200), allDay: instance.isFullDay, url, canvasAssignmentId: assignmentId, canvasOrigin:assignmentId?canvasUrl?.origin:undefined, detail: plain(instance.event.description), importGroup: group, importLabel: 'Lịch .ics · bản chụp thủ công' });
     }
   }
   if (Object.values(parsed).some(event => event?.type === 'VTODO')) warnings.push('Mục To-do trong tệp chưa được nhập.');

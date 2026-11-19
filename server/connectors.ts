@@ -3,7 +3,10 @@ import { get, set, secret, seal, remove, claim, release, update, workspaceId } f
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Item, Connection, Source } from '../src/types.js';
-export const CANVAS = 'https://umthcm.instructure.com';
+import { LEGACY_CANVAS_ORIGIN,normalizeCanvasAddress } from '../src/canvasAddress.js';
+import { canvasFetch,canvasNetworkMessage } from './canvas-network.js';
+export const canvasOrigin = async()=>normalizeCanvasAddress(await get('canvas-origin',LEGACY_CANVAS_ORIGIN));
+const canvasScope = new AsyncLocalStorage<string>();
 const GRAPH = 'https://graph.microsoft.com';
 export const origin = (process.env.APP_ORIGIN || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : 'http://localhost:5173')).replace(/\/$/, '');
 const syncBudget = new AsyncLocalStorage<number>();
@@ -24,7 +27,7 @@ export function msal() {
 export class ProviderError extends Error {
     constructor(public status: number, public provider: 'canvas' | 'outlook' = 'canvas', public reason: 'rejected' | 'scope' | 'response' = 'rejected') {
         const service = provider === 'canvas' ? 'Canvas' : 'Microsoft';
-        super(reason === 'scope' ? `${service} chưa cấp đủ quyền đọc mục này (HTTP ${status}).` : reason === 'response' ? `${service} trả về nội dung ngoài định dạng API. Hãy kiểm tra trang Canvas của trường hoặc thử lại sau.` : status === 401 ? provider === 'canvas' ? `Canvas chưa chấp nhận token (HTTP 401). Chưa thể kết luận token hết hạn. Kiểm tra token được tạo tại ${CANVAS}, sao chép đầy đủ chuỗi Token rồi thử lại.` : 'Microsoft chưa chấp nhận phiên đăng nhập (HTTP 401). Hãy kết nối lại.' : status === 403 ? `${service} chưa cấp quyền cho tài khoản đọc mục này (HTTP 403).` : status === 429 ? 'Dịch vụ đang giới hạn lượt truy cập. Sẽ thử lại ở lần đồng bộ sau.' : `${service} trả về lỗi HTTP ${status}.`);
+        super(reason === 'scope' ? `${service} chưa cấp đủ quyền đọc mục này (HTTP ${status}).` : reason === 'response' ? `${service} trả về nội dung ngoài định dạng API. Hãy kiểm tra trang Canvas của trường hoặc thử lại sau.` : status === 401 ? provider === 'canvas' ? `Canvas chưa chấp nhận token (HTTP 401). Chưa thể kết luận token hết hạn. Kiểm tra token được tạo tại đúng Canvas đã nhập, sao chép đầy đủ chuỗi Token rồi thử lại.` : 'Microsoft chưa chấp nhận phiên đăng nhập (HTTP 401). Hãy kết nối lại.' : status === 403 ? `${service} chưa cấp quyền cho tài khoản đọc mục này (HTTP 403).` : status === 429 ? 'Dịch vụ đang giới hạn lượt truy cập. Sẽ thử lại ở lần đồng bộ sau.' : `${service} trả về lỗi HTTP ${status}.`);
     }
 }
 export function normalizeCanvasToken(value: unknown): string {
@@ -33,20 +36,21 @@ export function normalizeCanvasToken(value: unknown): string {
     if (token.length < 10 || /[^\x21-\x7e]/.test(token)) throw new Error('Token chưa đúng định dạng. Chỉ dán chuỗi Token đầy đủ, không kèm khoảng trắng ở giữa.');
     return token;
 }
-export async function pages(path: string, token: string, provider: 'canvas' | 'outlook', fetcher: typeof fetch = fetch): Promise<any[]> {
-    const base = provider === 'canvas' ? CANVAS : GRAPH;
+export async function pages(path: string, token: string, provider: 'canvas' | 'outlook', fetcher?: typeof fetch, canvasBase?:string): Promise<any[]> {
+    const base = provider === 'canvas' ? normalizeCanvasAddress(canvasBase || canvasScope.getStore() || await canvasOrigin()) : GRAPH;
+    const request=fetcher || (provider==='canvas'?canvasFetch:fetch);
     let next: string | undefined = new URL(path, base).href;
     const result: any[] = [];
     const visited = new Set<string>();
     while (next) {
         if (Date.now() > (syncBudget.getStore() || Infinity)) throw new Error('Sync time budget exceeded.');
         const target = new URL(next);
-        if (target.origin !== base || !target.pathname.startsWith(provider === 'canvas' ? '/api/v1/' : '/v1.0/'))
+        if (target.username || target.password || target.hash || target.origin !== base || !target.pathname.startsWith(provider === 'canvas' ? '/api/v1/' : '/v1.0/'))
             throw new Error('Đường dẫn phân trang không hợp lệ.');
         if (visited.has(next) || visited.size >= 200)
             throw new Error('Dữ liệu vượt giới hạn đồng bộ.');
         visited.add(next);
-        const response: Response = await fetcher(next, { headers: { Authorization: `Bearer ${token}`, ...(provider === 'outlook' ? { Prefer: 'outlook.timezone="UTC"' } : {}) }, redirect: 'error', signal: AbortSignal.timeout(20000) });
+        const response: Response = await request(next, { headers: { Authorization: `Bearer ${token}`, ...(provider === 'outlook' ? { Prefer: 'outlook.timezone="UTC"' } : {}) }, redirect: 'error', signal: AbortSignal.timeout(20000) });
         if (!response.ok) {
             const scopeDenied = /\berror\s*=\s*"?insufficient_scope\b/i.test(response.headers.get('www-authenticate') || '');
             throw new ProviderError(response.status, provider, scopeDenied ? 'scope' : 'rejected');
@@ -73,7 +77,9 @@ export async function allItems(): Promise<Item[]> {
     const partitions = await get<string[]>('partitions', []);
     const raw = (await Promise.all(partitions.map(partition => get<Item[]>(`items:${partition}`, [])))).flat();
     const imports = await get<Item[]>('imported', []);
-    const importedAssignments = new Map(imports.filter(item => item.canvasAssignmentId).map(item => [item.canvasAssignmentId, item]));
+    const currentCanvas=await canvasOrigin();
+    const matchesCanvas=(item:Item)=>{try{return (item.canvasOrigin || new URL(item.url || '').origin)===currentCanvas;}catch{return false;}};
+    const importedAssignments = new Map(imports.filter(item => item.canvasAssignmentId && matchesCanvas(item)).map(item => [item.canvasAssignmentId, item]));
     const upstream = raw.map(item => {
         const id = Number(item.id.match(/^canvas:assignment:\d+:(\d+)$/)?.[1]);
         const fallback = importedAssignments.get(id);
@@ -81,7 +87,7 @@ export async function allItems(): Promise<Item[]> {
     });
     const liveUrls = new Set(upstream.filter(item => item.url && item.due).map(item => `${item.url}|${item.due}`));
     const canvasAssignments = new Set(upstream.map(item => item.id.match(/^canvas:assignment:\d+:(\d+)$/)?.[1]).filter(Boolean).map(Number));
-    return [...new Map(upstream.map(item => [item.id, item])).values(), ...imports.filter(item => !(item.canvasAssignmentId && canvasAssignments.has(item.canvasAssignmentId)) && (!item.url || !item.due || !liveUrls.has(`${item.url}|${item.due}`)))];
+    return [...new Map(upstream.map(item => [item.id, item])).values(), ...imports.filter(item => !(item.canvasAssignmentId && matchesCanvas(item) && canvasAssignments.has(item.canvasAssignmentId)) && (!item.url || !item.due || !liveUrls.has(`${item.url}|${item.due}`)))];
 }
 async function savePartition(source: Source, partition: string, items: Item[]) {
     await replacePartition(source, partition, items);
@@ -92,25 +98,26 @@ export async function disconnect(source: 'canvas' | 'outlook') {
     for (const partition of partitions.filter(value => value.startsWith(`${source}:`)))
         await remove(`items:${partition}`);
     await set('partitions', partitions.filter(value => !value.startsWith(`${source}:`)));
-    for (const name of source === 'canvas' ? ['canvas-token'] : ['ms-cache', 'ms-account'])
+    for (const name of source === 'canvas' ? ['canvas-token','canvas-origin','automation:canvas-status','canvas:last-check'] : ['ms-cache', 'ms-account'])
         await remove(name);
     await set(`connection:${source}`, { connected: false });
 }
-export async function validateCanvas(token: string, fetcher: typeof fetch = fetch) {
-    const profile = (await pages('/api/v1/users/self/profile', token, 'canvas', fetcher))[0];
+export async function validateCanvas(token: string, fetcher?: typeof fetch, canvasBase?:string) {
+    const profile = (await pages('/api/v1/users/self/profile', token, 'canvas', fetcher, canvasBase))[0];
     if (!profile || !Number.isInteger(profile.id) || profile.id <= 0) throw new ProviderError(200, 'canvas', 'response');
     return profile;
 }
-export async function canvasModuleFiles(courseId: number, course: string, token: string, fetcher: typeof fetch = fetch): Promise<Item[]> {
+export async function canvasModuleFiles(courseId: number, course: string, token: string, fetcher?: typeof fetch, canvasBase?:string): Promise<Item[]> {
+    const base=normalizeCanvasAddress(canvasBase || canvasScope.getStore() || await canvasOrigin());
     if (!Number.isSafeInteger(courseId) || courseId < 1) throw new Error('Invalid course');
-    const modules = await pages(`/api/v1/courses/${courseId}/modules?include[]=items&include[]=content_details&per_page=100`, token, 'canvas', fetcher);
+    const modules = await pages(`/api/v1/courses/${courseId}/modules?include[]=items&include[]=content_details&per_page=100`, token, 'canvas', fetcher, base);
     const result: Item[] = [];
     for (const module of modules) {
         if (!Number.isSafeInteger(module.id) || module.id < 1 || module.state === 'locked' || module.published === false) continue;
-        const items = Array.isArray(module.items) && module.items.length === module.items_count ? module.items : await pages(`/api/v1/courses/${courseId}/modules/${module.id}/items?include[]=content_details&per_page=100`, token, 'canvas', fetcher);
+        const items = Array.isArray(module.items) && module.items.length === module.items_count ? module.items : await pages(`/api/v1/courses/${courseId}/modules/${module.id}/items?include[]=content_details&per_page=100`, token, 'canvas', fetcher, base);
         for (const item of items) {
             if (item.type !== 'File' || !Number.isSafeInteger(item.content_id) || item.content_id < 1 || !Number.isSafeInteger(item.id) || item.id < 1 || item.published === false || item.content_details?.locked_for_user === true) continue;
-            result.push({ id: `canvas:file:${courseId}:${item.content_id}`, source: 'canvas', kind: 'file', title: text(item.title || 'Tài liệu trong mô-đun'), course, due: null, url: `${CANVAS}/courses/${courseId}/modules/items/${item.id}`, detail: 'Liên kết tài liệu từ mô-đun được Canvas trả về. Canvas kiểm tra quyền khi bạn mở; Daylight không tải nội dung tệp.' });
+            result.push({ id: `canvas:file:${courseId}:${item.content_id}`, source: 'canvas', kind: 'file', title: text(item.title || 'Tài liệu trong mô-đun'), course, due: null, url: `${base}/courses/${courseId}/modules/items/${item.id}`, detail: 'Liên kết tài liệu từ mô-đun được Canvas trả về. Canvas kiểm tra quyền khi bạn mở; Daylight không tải nội dung tệp.' });
         }
     }
     return [...new Map(result.map(item => [item.id, item])).values()];
@@ -122,6 +129,10 @@ export function canvasResourceWarning(course: string, kind: string, error: unkno
     return `${course} / ${labels[kind] || kind}: ${publicError(error)}`;
 }
 export async function syncCanvas() {
+    const base=await canvasOrigin();
+    return canvasScope.run(base,()=>syncCanvasAtOrigin(base));
+}
+async function syncCanvasAtOrigin(canvasBase:string) {
     const token = await secret('canvas-token');
     if (!token)
         return;
@@ -160,7 +171,7 @@ export async function syncCanvas() {
                         id: `canvas:${kind}:${course.id}:${value.id}`, source: 'canvas', kind: kind === 'assignment' && value.is_quiz_assignment ? 'quiz' : kind === 'assignment' && value.discussion_topic ? 'discussion' : kind, course: courseName,
                         title: kind === 'grade' ? `${courseName} · Điểm hiện tại` : text(value.name || value.title || value.display_name || 'Chưa có tiêu đề'),
                         due: date(value.due_at || (kind === 'discussion' ? value.assignment?.due_at : null)),
-                        url: safeUrl(kind === 'file' ? `${CANVAS}/courses/${course.id}/files/${value.id}` : value.html_url || value.grades?.html_url),
+                        url: safeUrl(kind === 'file' ? `${canvasBase}/courses/${course.id}/files/${value.id}` : value.html_url || value.grades?.html_url),
                         detail: kind === 'grade' ? `Điểm: ${value.grades?.current_score ?? 'Chưa công bố'} · Xếp loại: ${value.grades?.current_grade ?? '—'}` : text(value.message || value.description || (kind === 'file' ? `${Math.round((value.size || 0) / 1024)} KB` : '')),
                         completed: Boolean(value.submission?.submitted_at || value.submission?.excused || ['submitted', 'graded'].includes(value.submission?.workflow_state)),
                     })));
@@ -193,7 +204,7 @@ export async function syncCanvas() {
         for (const partition of partitions.filter(value => value.startsWith('canvas:') && !activePartitions.has(value)))
             await remove(`items:${partition}`);
         await set('partitions', partitions.filter(value => !value.startsWith('canvas:') || activePartitions.has(value)));
-        await set('connection:canvas', { connected: true, name: profile.name, lastSync: new Date().toISOString(), warnings });
+        await set('connection:canvas', { connected: true, canvasUrl:canvasBase, name: profile.name, lastSync: new Date().toISOString(), warnings });
     }
     catch (error) {
         await set('connection:canvas', { ...previous, connected: false, error: publicError(error) });
@@ -231,7 +242,7 @@ export async function syncOutlook() {
         await set('connection:outlook', { ...previous, connected: false, error: 'Không thể làm mới phiên Microsoft. Hãy kết nối lại; trường có thể cần cấp quyền.' });
     }
 }
-export function publicError(error: unknown) { return error instanceof ProviderError ? error.message : 'Chưa tải được dữ liệu. Kiểm tra kết nối và thử lại.'; }
+export function publicError(error: unknown) { return error instanceof ProviderError ? error.message : canvasNetworkMessage(error) || 'Chưa tải được dữ liệu. Kiểm tra kết nối và thử lại.'; }
 const running = new Map<string,Promise<void>>();
 export const isSyncing = () => running.has(workspaceId());
 export function syncAll() {

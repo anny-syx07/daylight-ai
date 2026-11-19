@@ -1,9 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { BookOpen, Check, Copy, ExternalLink, Link2, Sun } from 'lucide-react';
 import './connection-help.css';
+import { canvasSettingsLink } from './canvasAddress';
 
 export const connectionLinks = {
-  canvas: 'https://umthcm.instructure.com/profile/settings',
   microsoft: 'https://entra.microsoft.com/',
   environment: 'https://vercel.com/annys-projects-6f31807a/daylight-ai/settings/environment-variables',
   deployments: 'https://vercel.com/annys-projects-6f31807a/daylight-ai/deployments',
@@ -26,18 +26,20 @@ function CopyField({ label, value, multiline = false }: { label: string; value: 
   </div>;
 }
 
-export function CanvasHelp({ compact = false }: { compact?: boolean }) {
+export function CanvasHelp({ compact = false,canvasUrl }: { compact?: boolean;canvasUrl?:string }) {
+  const [school,setSchool]=useState('');
+  const settings=canvasSettingsLink(canvasUrl??school);
   return <div className={`connection-steps ${compact ? 'compact' : ''}`}>
     <p className="guide-intro">Mở Canvas ở tab bên cạnh. Xong mỗi bước, bạn có thể quay lại Daylight bất cứ lúc nào.</p>
-    <NewTabLink href={connectionLinks.canvas}>Mở trang cài đặt Canvas</NewTabLink>
+    {canvasUrl===undefined&&<label>Địa chỉ Canvas của trường<input inputMode="url" autoCapitalize="none" spellCheck={false} value={school} onChange={e=>setSchool(e.target.value)} placeholder="https://truong.instructure.com"/></label>}{settings?<NewTabLink href={settings}>Mở trang cài đặt Canvas</NewTabLink>:<p>Nhập link Canvas chính thức của trường để mở đúng trang tạo token. Hỗ trợ tên miền instructure.com và tên miền riêng qua HTTPS.</p>}
     <ol>
       <li><strong>Đăng nhập Canvas của trường.</strong><p>Nếu chưa đến đúng trang, chọn ảnh đại diện / <b>Account (Tài khoản)</b> ở thanh bên → <b>Settings (Cài đặt)</b>.</p></li>
       <li><strong>Tạo quyền truy cập cho Daylight.</strong><p>Cuộn đến <b>Approved Integrations</b> → <b>+ New Access Token</b>. Ô <b>Purpose</b> điền <b>Daylight AI</b>; chọn ngày hết hạn phù hợp rồi bấm <b>Generate Token</b>.</p></li>
-      <li><strong>Quay lại Daylight để kết nối.</strong><p>Sao chép token vừa hiện. Trong Daylight, chọn <b>Kết nối → Canvas LMS → Kết nối</b>, dán vào ô <b>Access token</b> rồi bấm <b>Kết nối bảo mật</b>.</p></li>
+      <li><strong>Quay lại Daylight để kết nối.</strong><p>Sao chép token vừa hiện. Trong Daylight, chọn <b>Kết nối → Canvas LMS → Kết nối</b>, nhập cùng địa chỉ Canvas của trường và dán token vào ô <b>Access token</b> rồi bấm <b>Kết nối bảo mật</b>.</p></li>
       {!compact && <li><strong>Chờ dữ liệu của bạn xuất hiện.</strong><p>Daylight kiểm tra tài khoản rồi đồng bộ. Khi thấy <b>Đã xác thực</b> và thời gian đồng bộ, vào <b>Việc cần làm</b> hoặc <b>Hộp học tập</b>. Nếu có cảnh báo, mở mục đó để biết môn / loại dữ liệu nào chưa được cấp quyền.</p></li>}
     </ol>
     <details className="guide-troubleshoot"><summary>Không thấy nút New Access Token?</summary><p>Trường có thể giới hạn quyền tạo token. Nhờ bộ phận hỗ trợ Canvas của trường cấp cách kết nối phù hợp cho tài khoản của bạn.</p></details>
-    <details className="guide-troubleshoot"><summary>Token vừa tạo nhưng Canvas chưa chấp nhận?</summary><p>Mã HTTP 401 chỉ cho biết Canvas chưa xác thực yêu cầu; riêng mã đó chưa đủ để kết luận token hết hạn.</p><p>Mở trang cài đặt Canvas bằng nút ở trên và kiểm tra địa chỉ là <b>umthcm.instructure.com</b>. Sao chép đầy đủ giá trị <b>Token</b>, rồi dán lại trong ô Access token của Daylight. Nếu bạn đã chọn ngày hết hạn, đối chiếu ngày đó trong Canvas.</p><p>Nếu app báo thiếu quyền (HTTP 403 / insufficient scope), nhờ hỗ trợ Canvas của trường kiểm tra quyền API. Đăng nhập được trên trang Canvas chưa đồng nghĩa với quyền API đã được cấp.</p></details>
+    <details className="guide-troubleshoot"><summary>Token vừa tạo nhưng Canvas chưa chấp nhận?</summary><p>Mã HTTP 401 chỉ cho biết Canvas chưa xác thực yêu cầu; riêng mã đó chưa đủ để kết luận token hết hạn.</p><p>Mở trang cài đặt Canvas bằng nút ở trên và kiểm tra đó là <b>cùng địa chỉ Canvas bạn nhập trong Daylight</b>. Token của trường này không dùng cho Canvas trường khác. Sao chép đầy đủ giá trị <b>Token</b>, rồi dán lại trong ô Access token của Daylight. Nếu bạn đã chọn ngày hết hạn, đối chiếu ngày đó trong Canvas.</p><p>Nếu app báo thiếu quyền (HTTP 403 / insufficient scope), nhờ hỗ trợ Canvas của trường kiểm tra quyền API. Đăng nhập được trên trang Canvas chưa đồng nghĩa với quyền API đã được cấp.</p></details>
     <details className="guide-troubleshoot"><summary>Đã xác thực nhưng một số Tài liệu / Quiz báo 403 hoặc 404?</summary><p>Kết nối tài khoản đã thành công. HTTP 403 ở Tài liệu là chưa có quyền liệt kê thư mục của môn đó; Daylight thử lấy liên kết từ các mô-đun Canvas cho phép đọc, không tải nội dung tệp. Khi mở liên kết, Canvas vẫn kiểm tra quyền của bạn.</p><p>HTTP 404 ở API Quiz không đủ để kết luận môn không có quiz. Daylight vẫn giữ các quiz lấy được qua danh sách bài tập; chưa bảo đảm đã đủ tất cả. Các bài tập và mục khác tải thành công vẫn sử dụng bình thường. Bấm <b>Đồng bộ</b> để kiểm tra lại.</p></details>
     {!compact && <p className="guide-source"><a href="https://community.instructure.com/en/instructure/kb/articles/662901-how-do-i-manage-api-access-tokens-in-my-user-account" target="_blank" rel="noopener noreferrer">Xem hướng dẫn Canvas chính thức <ExternalLink size={12}/></a></p>}
   </div>;
@@ -69,9 +71,9 @@ export function GmailHelp() {
     <p>Luồng dữ liệu: <b>thư Outlook / thông báo Canvas → Gmail cá nhân → nhãn Daylight → Daylight</b>. Bạn tự cấp quyền trên Google; không cần tạo ứng dụng Microsoft cho luồng này.</p>
     <ol>
       <li><strong>Đưa thư học tập về Gmail cá nhân.</strong><NewTabLink href="https://outlook.cloud.microsoft/mail/options/mail/forwarding">Mở chuyển tiếp Outlook</NewTabLink><p>Bật <b>Chuyển tiếp</b> → điền Gmail của bạn → tích <b>Lưu một bản sao của thư được chuyển tiếp</b> → <b>Lưu</b>. Chỉ hoàn tất khi bạn muốn sao chép thư trường sang Gmail. Gửi một thư thử tới email trường và kiểm tra Gmail đã nhận được chưa. Thiết lập này áp dụng thư mới; không kéo thư cũ.</p><p>Nếu thư không tới hoặc có lỗi <b>5.7.520</b>, trường có thể chặn chuyển tiếp ra ngoài. Bạn vẫn có thể chọn vài thư rồi bấm Forward thủ công nếu được phép.</p></li>
-      <li><strong>Cho Canvas gửi thông báo thẳng tới Gmail.</strong><NewTabLink href={connectionLinks.canvas}>Mở cài đặt Canvas</NewTabLink><p>Trong <b>Ways to Contact / Email Addresses</b> → <b>+ Email Address</b> → thêm Gmail → mở thư xác minh trong Gmail. Sau đó vào <b>Account → Notifications</b>, bật loại thông báo bạn cần ở cột Gmail, chọn gửi ngay nếu có. Cách này lấy thông báo mới; không lấy toàn bộ kho điểm hoặc tệp Canvas.</p></li>
+      <li><strong>Cho Canvas gửi thông báo thẳng tới Gmail.</strong><a className="text-button" href="#canvas">Chọn địa chỉ Canvas của trường ở hướng dẫn bên dưới ↓</a><p>Trong <b>Ways to Contact / Email Addresses</b> → <b>+ Email Address</b> → thêm Gmail → mở thư xác minh trong Gmail. Sau đó vào <b>Account → Notifications</b>, bật loại thông báo bạn cần ở cột Gmail, chọn gửi ngay nếu có. Cách này lấy thông báo mới; không lấy toàn bộ kho điểm hoặc tệp Canvas.</p></li>
       <li><strong>Chọn email Daylight được nhận.</strong><NewTabLink href="https://mail.google.com/">Mở Gmail</NewTabLink><p>Tạo nhãn tên chính xác <b>Daylight</b>. Gắn nhãn đó cho một thư học tập để thử. Muốn tự động về sau: mở một thư mẫu → <b>⋮ → Lọc thư giống thư này → Tạo bộ lọc → Áp dụng nhãn Daylight</b>. Kiểm tra điều kiện lọc chỉ khớp thư bạn muốn đưa vào app.</p></li>
-      <li><strong>Lấy mã cầu nối riêng trong Daylight.</strong><p>Về <b>Kết nối → Đưa thư và lịch về Daylight → Tạo cầu nối Gmail</b>. Giữ tab này mở; bạn sẽ sao chép hai phần <b>Code.gs</b> và <b>appsscript.json</b>.</p><NewTabLink href="/?page=connections">Mở mục Kết nối Daylight</NewTabLink></li>
+      <li><strong>Lấy mã cầu nối riêng trong Daylight.</strong><p>Về <b>Kết nối → Đưa thư và lịch về Daylight → Tạo cầu nối Gmail</b>. Giữ tab này mở; bạn sẽ sao chép hai phần <b>Code.gs</b> và <b>appsscript.json</b>.</p><NewTabLink href="/app?page=connections">Mở mục Kết nối Daylight</NewTabLink></li>
       <li><strong>Tạo Google Apps Script bằng Gmail cá nhân.</strong><NewTabLink href="https://script.google.com/home/start">Mở Google Apps Script</NewTabLink><p>Bấm <b>Dự án mới / New project</b>, đặt tên <b>Daylight Gmail Bridge</b>. Trong <b>Code.gs</b>, xóa mã mẫu và dán phần Code.gs vừa sao chép từ app.</p><p>Bấm biểu tượng bánh răng <b>Project Settings</b> → bật <b>Show appsscript.json manifest file in editor</b>. Về trình soạn thảo <b>Editor</b> → mở <b>appsscript.json</b> → thay toàn bộ bằng phần appsscript.json từ Daylight. Bấm <b>Lưu</b>. Tệp này bật Gmail API và khai báo quyền chỉ đọc Gmail.</p></li>
       <li><strong>Chạy một lần và tự cấp quyền Google.</strong><p>Ở thanh trên, chọn hàm <b>setupDaylight</b> → <b>Run / Chạy</b> → <b>Review permissions</b> → chọn Gmail cá nhân → xem và chấp thuận quyền đọc Gmail, gửi yêu cầu tới Daylight và chạy theo lịch nếu bạn đồng ý. Nếu Google hiện cảnh báo ứng dụng chưa xác minh, chỉ tiếp tục khi đó đúng là dự án bạn vừa tạo và đã xem mã. Nếu Google chặn, dừng ở đó; vẫn có cách nhập tệp bên dưới.</p><p>Không cần bấm Deploy. Hàm này gửi thử rồi tạo lịch kiểm tra khoảng <b>10 phút/lần</b>. Google có giới hạn và có thể chạy trễ. Mỗi lượt gửi tối đa 100 thư chưa gửi trong 30 ngày qua, quét tối đa 1.000 thư gần nhất mang nhãn.</p></li>
       <li><strong>Kiểm tra thư thật trong app.</strong><p>Quay lại Daylight → <b>Kết nối</b> để xem thời gian liên lạc và số email đã lưu → <b>Hộp học tập</b>. Bấm dấu <b>+</b> cạnh email để tạo việc và chọn deadline. Lịch iCal bên dưới sẽ giúp lấy ngày hạn chính xác hơn từ Canvas.</p><p>Muốn dừng: chọn hàm <b>stopDaylight</b> rồi Chạy trong Apps Script; trong Daylight bấm <b>Ngắt cầu nối Gmail</b> để thu hồi khóa nhận. Email đã nhập vẫn được giữ và có thể xóa từng mục trong Hộp học tập.</p></li>
@@ -83,7 +85,7 @@ export function GmailHelp() {
 
 export function FileImportHelp() {
   return <div className="connection-steps">
-    <NewTabLink href="https://umthcm.instructure.com/calendar">Mở lịch Canvas</NewTabLink>
+    <p>Mở Canvas của trường → Calendar (Lịch) → Calendar Feed để lấy lịch. Địa chỉ Canvas đã kết nối cũng có sẵn trong mục Kết nối của Daylight.</p>
     <ol>
       <li><strong>Tải lịch Canvas.</strong><p>Trong <b>Calendar / Lịch</b>, chọn <b>Calendar Feed / Nguồn cấp lịch</b> ở thanh bên phải → <b>Click to view Calendar Feed</b> để tải tệp <b>.ics</b>. Nếu máy mở ứng dụng Lịch, hủy thêm lịch và dùng tùy chọn tải liên kết xuống của trình duyệt.</p></li>
       <li><strong>Chọn tệp trong Daylight.</strong><p>Vào <b>Kết nối → Lịch Canvas hoặc email tải về</b> → chọn tệp <b>.ics</b> → xem trước tên và ngày → <b>Lưu vào Daylight</b>. Lịch này không cần access token hay quyền Outlook.</p></li>
@@ -101,13 +103,13 @@ export function ConnectionHelpPage() {
     if (['canvas', 'outlook', 'gmail', 'nhap-tep'].includes(section)) document.getElementById(section)?.scrollIntoView();
   }, []);
   return <main className="connection-help-page">
-    <header className="guide-page-header"><a className="brand" href="/"><img src="/icon.svg" alt=""/>daylight.</a><a className="secondary" href="/?page=connections"><Link2 size={16}/>Về mục Kết nối</a></header>
+    <header className="guide-page-header"><a className="brand" href="/"><img src="/icon.svg" alt=""/>daylight.</a><a className="secondary" href="/app?page=connections"><Link2 size={16}/>Về mục Kết nối</a></header>
     <div className="guide-page-heading"><span className="eyebrow"><Sun size={15}/> MỞ TAB BÊN CẠNH, LÀM TỪNG BƯỚC THÔI</span><h1>Kết nối việc học,<br/><span>nhẹ nhàng từng chút.</span></h1><p>Các nút mở trang bên ngoài ở tab mới, để hướng dẫn này luôn ở đây cùng bạn.</p></div>
     <nav className="guide-jump" aria-label="Chọn hướng dẫn"><a href="#gmail"><Link2 size={17}/>Gmail · cầu nối thư trường</a><a href="#nhap-tep"><BookOpen size={17}/>Nhập lịch · không cần token</a><a href="#canvas">Canvas API</a><a href="#outlook">Outlook OAuth</a></nav>
     <section id="gmail" className="panel guide-section"><div className="guide-section-title"><span className="source-logo big outlook">G</span><div><p className="eyebrow">DÙNG GMAIL CÁ NHÂN</p><h2>Cầu nối email học tập</h2></div></div><GmailHelp/></section>
-    <section id="nhap-tep" className="panel guide-section"><div className="guide-section-title"><span className="source-logo big canvas">↗</span><div><p className="eyebrow">LỊCH VÀ EMAIL BẠN ĐÃ TẢI</p><h2>Nhập tệp, dùng ngay</h2></div></div><FileImportHelp/><a className="primary" href="/?page=connections">Chọn tệp trong Daylight</a></section>
-    <section id="canvas" className="panel guide-section"><div className="guide-section-title"><span className="source-logo big canvas">C</span><div><p className="eyebrow">BÀI TẬP, QUIZ, TÀI LIỆU VÀ LỊCH</p><h2>Kết nối Canvas của trường</h2></div></div><CanvasHelp/><a className="primary" href="/?page=connections">Tôi đã có token · về Daylight</a></section>
-    <section id="outlook" className="panel guide-section"><div className="guide-section-title"><span className="source-logo big outlook">O</span><div><p className="eyebrow">EMAIL VÀ LỊCH MICROSOFT 365</p><h2>Kết nối Outlook của trường</h2></div></div><OutlookHelp/><a className="primary" href="/?page=connections">Đã cài đặt xong · về Daylight</a></section>
+    <section id="nhap-tep" className="panel guide-section"><div className="guide-section-title"><span className="source-logo big canvas">↗</span><div><p className="eyebrow">LỊCH VÀ EMAIL BẠN ĐÃ TẢI</p><h2>Nhập tệp, dùng ngay</h2></div></div><FileImportHelp/><a className="primary" href="/app?page=connections">Chọn tệp trong Daylight</a></section>
+    <section id="canvas" className="panel guide-section"><div className="guide-section-title"><span className="source-logo big canvas">C</span><div><p className="eyebrow">BÀI TẬP, QUIZ, TÀI LIỆU VÀ LỊCH</p><h2>Kết nối Canvas của trường</h2></div></div><CanvasHelp/><a className="primary" href="/app?page=connections">Tôi đã có token · về Daylight</a></section>
+    <section id="outlook" className="panel guide-section"><div className="guide-section-title"><span className="source-logo big outlook">O</span><div><p className="eyebrow">EMAIL VÀ LỊCH MICROSOFT 365</p><h2>Kết nối Outlook của trường</h2></div></div><OutlookHelp/><a className="primary" href="/app?page=connections">Đã cài đặt xong · về Daylight</a></section>
     <footer className="guide-page-footer">Từng chút một, cũng là tiến lên. ☀️</footer>
   </main>;
 }

@@ -46,6 +46,11 @@ test('private API requires session and exact Origin; task changes persist and lo
     const canvasError = await invalidCanvas.json();
     assert.match(canvasError.error, /định dạng/);
     assert.ok(!JSON.stringify(canvasError).includes('synthetic broken token'));
+    for(const canvasUrl of ['https://127.0.0.1','http://school.instructure.com','https://user:secret@school.instructure.com','https://school.internal','']){
+      const rejected=await fetch(`${origin}/api/connect/canvas`,{method:'POST',headers,body:JSON.stringify({token:'synthetic-valid-format-token',canvasUrl})});
+      assert.equal(rejected.status,400);assert.ok(!JSON.stringify(await rejected.json()).includes('synthetic-valid-format-token'));
+    }
+    assert.equal((await (await fetch(`${origin}/api/dashboard`,{headers})).json()).connections.canvas.connected,false);
     assert.equal((await fetch(`${origin}/api/tasks`, { method: 'POST', headers: { ...headers, Origin: 'https://evil.example' }, body: JSON.stringify({ title: 'Blocked' }) })).status, 403);
     const taskResponse = await fetch(`${origin}/api/tasks`, { method: 'POST', headers, body: JSON.stringify({ title: 'Test task', due: null, course: 'Test' }) });
     assert.equal(taskResponse.status, 200);

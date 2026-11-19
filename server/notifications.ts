@@ -12,6 +12,10 @@ interface State { initialized: boolean; seen: Record<string, boolean>; jobs: Job
 const empty = (): State => ({ initialized:false,seen:{},jobs:[],invalidDevices:0,backlog:false });
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 export function isNewMessage(item: Item) { return item.importGroup === 'gmail' && item.kind === 'mail' || item.source === 'canvas' && ['announcement','discussion','assignment','quiz'].includes(item.kind); }
+export async function discardCanvasMessages(items:Item[]){
+  const ids=new Set(items.filter(i=>i.source==='canvas').map(i=>hash(i.id)));
+  await update<State>('notifications:state',empty(),state=>({...state,jobs:state.jobs.filter(j=>!ids.has(j.id)),seen:Object.fromEntries(Object.entries(state.seen).filter(([id])=>!ids.has(id)))}));
+}
 
 export async function collectNewMessages(items?: Item[]) {
   const messages = (items || await allItems()).filter(isNewMessage);

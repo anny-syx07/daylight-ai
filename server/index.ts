@@ -4,14 +4,15 @@ import { resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
 import { waitUntil } from '@vercel/functions';
-import { get, set, remove, seal, update, inWorkspace,eraseMemberData,workspaceId } from './store.js';
-import { allItems, syncAll, isSyncing, validateCanvas, normalizeCanvasToken, ProviderError, disconnect, msal, cryptoProvider, microsoftReady, scopes, origin, publicError } from './connectors.js';
+import { get, set, remove, seal, update, inWorkspace,eraseMemberData,workspaceId,claim,release } from './store.js';
+import { allItems, syncAll, isSyncing, validateCanvas, normalizeCanvasToken, ProviderError, disconnect, msal, cryptoProvider, microsoftReady, scopes, origin, publicError,canvasOrigin } from './connectors.js';
+import { normalizeCanvasAddress } from '../src/canvasAddress.js';
 import { defaultSettings, pushKey, sendReminders, runReminderClock, prepareTestPush } from './reminders.js';
 import type { Item, Connection } from '../src/types.js';
 import { previewImport, commitImport, importStatus, gmailAuthorized, receiveGmail, gmailSetup, revokeGmail } from './imports.js';
 import { sisAuthorized, sisSetup, receiveSis, revokeSis } from './sis-bridge.js';
 import { canvasAutomation, maybeAutoSyncCanvas } from './auto-sync.js';
-import { collectNewMessages, deliverNewMessages, notificationStatus } from './notifications.js';
+import { collectNewMessages, deliverNewMessages, notificationStatus,discardCanvasMessages } from './notifications.js';
 import { bindDevice, unbindDevice,ownsDevice } from './push-devices.js';
 import { memberAuthReady, memberIdentity, memberAuthProxy, hasMemberCookie, clearMemberCookies, revokeMemberSession, bridgeWorkspace } from './member-auth.js';
 const production = process.env.NODE_ENV === 'production';
@@ -120,7 +121,7 @@ app.get('/api/dashboard', async (_request, response) => {
     const raw = [...await allItems(), ...await get<Item[]>('manual', [])];
     const assignments = new Set(raw.filter(item => item.kind === 'assignment' && item.url).map(item => item.url));
     const items = raw.filter(item => !(['quiz', 'discussion'].includes(item.kind) && item.url && assignments.has(item.url))).map(item => ({ ...item, completed: item.completed || completed[item.id] || false }));
-    response.json({ items, connections: { canvas: { ...await get<Connection>('connection:canvas', { connected: false }), diagnostic: await get('canvas:last-check', null) }, outlook: await get<Connection>('connection:outlook', { connected: false }) }, imports: await importStatus(), automation: { canvas: await canvasAutomation() }, notifications: await notificationStatus(), settings: await get('settings', defaultSettings), reminderClock: await get('reminder:clock', null), pushKey, microsoftReady, passwordRequired: Boolean(password), serverless });
+    response.json({ items, connections: { canvas: { ...await get<Connection>('connection:canvas', { connected: false }), canvasUrl:await get('canvas-token',null)?await canvasOrigin():undefined, diagnostic: await get('canvas:last-check', null) }, outlook: await get<Connection>('connection:outlook', { connected: false }) }, imports: await importStatus(), automation: { canvas: await canvasAutomation() }, notifications: await notificationStatus(), settings: await get('settings', defaultSettings), reminderClock: await get('reminder:clock', null), pushKey, microsoftReady, passwordRequired: Boolean(password), serverless });
 });
 app.post('/api/push/status',async(request,response)=>response.json({registered:typeof request.body.endpoint==='string' && await ownsDevice(request.body.endpoint) && (await get<any[]>('subscriptions',[])).some(s=>s.endpoint===request.body.endpoint)}));
 app.delete('/api/workspace',async(request,response)=>{if(workspaceId()==='owner'||request.body.confirm!=='DELETE'){response.sendStatus(400);return;}if(isSyncing()){response.status(409).json({error:'Đợi lần đồng bộ đang chạy hoàn tất rồi xóa nhé.'});return;}try{for(const sub of await get<any[]>('subscriptions',[]))await unbindDevice(sub.endpoint);await revokeGmail();await revokeSis();await eraseMemberData();response.json({ok:true});}catch{response.status(400).json({error:'Chưa xóa được. Hãy thử lại.'});}});
@@ -156,34 +157,40 @@ app.delete('/api/imports/gmail/setup', async (_request, response) => {
     response.json({ ok: true });
 });
 app.post('/api/connect/canvas', async (request, response) => {
-    if (isSyncing()) {
-        response.status(409).json({ error: 'Đang đồng bộ. Chờ một chút rồi kết nối lại nhé.' });
-        return;
-    }
-    let token: string;
-    try { token = normalizeCanvasToken(request.body.token); }
-    catch (error) { response.status(400).json({ error: (error as Error).message }); return; }
+    let token:string,canvasUrl:string;
     try {
-        const profile = await validateCanvas(token);
-        await set('canvas-token', seal(token));
-        await set('canvas:last-check', { checkedAt: new Date().toISOString(), ok: true, httpStatus: 200 });
-        await set('connection:canvas', { connected: true, name: profile.name });
-        if (serverless) await syncAll(); else void syncAll();
-        response.json({ ok: true });
-    }
-    catch (error) {
-        const diagnostic = { checkedAt: new Date().toISOString(), ok: false, httpStatus: error instanceof ProviderError ? error.status : null, reason: error instanceof ProviderError ? error.reason : 'network' };
-        await set('canvas:last-check', diagnostic);
-        response.status(400).json({ error: publicError(error), diagnostic });
-    }
+        token=normalizeCanvasToken(request.body.token);
+        canvasUrl=normalizeCanvasAddress(request.body.canvasUrl ?? (await get('canvas-token',null)?await canvasOrigin():''));
+    } catch(error){response.status(400).json({error:(error as Error).message});return;}
+    const lease=randomBytes(16).toString('hex');
+    if(isSyncing()||!await claim('lock:sync',lease,280000)){response.status(409).json({error:'Đang đồng bộ. Chờ một chút rồi kết nối lại nhé.'});return;}
+    let connected=false;
+    try {
+        const profile=await validateCanvas(token,undefined,canvasUrl);
+        if(canvasUrl!==await canvasOrigin()){
+            await discardCanvasMessages(await allItems());
+            await disconnect('canvas');
+            for(const name of ['completed','snoozes'])await update<Record<string,unknown>>(name,{},values=>Object.fromEntries(Object.entries(values).filter(([id])=>!id.startsWith('canvas:'))));
+        }
+        await set('canvas-origin',canvasUrl);
+        await set('canvas-token',seal(token));
+        await set('canvas:last-check',{checkedAt:new Date().toISOString(),ok:true,httpStatus:200});
+        await set('connection:canvas',{connected:true,canvasUrl,name:profile.name});
+        connected=true;
+    }catch(error){
+        const diagnostic={checkedAt:new Date().toISOString(),ok:false,httpStatus:error instanceof ProviderError?error.status:null,reason:error instanceof ProviderError?error.reason:'network'};
+        await set('canvas:last-check',diagnostic);response.status(400).json({error:publicError(error),diagnostic});
+    }finally{await release('lock:sync',lease);}
+    if(!connected)return;
+    if(serverless)await syncAll();else void syncAll();
+    response.json({ok:true});
 });
-app.delete('/api/connect/:source', async (request, response) => { if (isSyncing()) {
-    response.status(409).json({ error: 'Đang đồng bộ. Chờ một chút rồi ngắt kết nối nhé.' });
-    return;
-} if (!['canvas', 'outlook'].includes(request.params.source)) {
-    response.sendStatus(400);
-    return;
-} await disconnect(request.params.source as 'canvas' | 'outlook'); response.json({ ok: true }); });
+app.delete('/api/connect/:source',async(request,response)=>{
+    if(!['canvas','outlook'].includes(request.params.source)){response.sendStatus(400);return;}
+    const lease=randomBytes(16).toString('hex');
+    if(isSyncing()||!await claim('lock:sync',lease,280000)){response.status(409).json({error:'Đang đồng bộ. Chờ một chút rồi ngắt kết nối nhé.'});return;}
+    try{await disconnect(request.params.source as 'canvas'|'outlook');response.json({ok:true});}finally{await release('lock:sync',lease);}
+});
 app.post('/api/sync', async (_request, response) => { await collectNewMessages(); await syncAll(); await collectNewMessages(); waitUntil(deliverNewMessages().catch(() => {})); await sendReminders(); response.json({ ok: true }); });
 app.post('/api/notifications/scan', async (_request, response) => { await collectNewMessages(); waitUntil(deliverNewMessages().catch(() => {})); response.json(await notificationStatus()); });
 app.patch('/api/notifications/settings', async (request, response) => { if(typeof request.body.enabled!=='boolean'){response.sendStatus(400);return;} await set('notifications:enabled',request.body.enabled); response.json({enabled:request.body.enabled}); });
