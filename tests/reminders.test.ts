@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runInNewContext } from 'node:vm';
 import webpush from 'web-push';
-import { bridgeCode } from '../server/gmail-bridge.js';
+import { bridgeCode, reminderClockCode } from '../server/gmail-bridge.js';
 
 const directory=mkdtempSync(join(tmpdir(),'daylight-reminders-'));
 process.env.DATA_DIR=directory;delete process.env.DATABASE_URL;
@@ -56,6 +56,10 @@ test('Google minute trigger honors server wake-ups and retries without requiring
   clock+=60000;succeeds=false;assert.throws(()=>context.tickDaylightReminders());
   succeeds=true;context.tickDaylightReminders();assert.equal(requests,3);
   assert.ok(!JSON.stringify(props).includes('Synthetic reminder'));
+  const standalone=reminderClockCode({endpoint:'https://daylight.example/api/imports/gmail/receive',key:'synthetic'});
+  assert.ok(!standalone.includes('Gmail.Users'));assert.ok(!standalone.includes('function syncDaylight'));
+  runInNewContext(standalone,context);context.setupDaylightReminderClock();
+  assert.equal(triggers.at(-1).name,'tickDaylightReminderClock');assert.equal(requests,4);
 });
 
 test('sound test only targets registered devices and is throttled; worker explicitly requests sound',async()=>{

@@ -97,3 +97,14 @@ function daylightSend(messages) {
 }
 `;
 }
+
+/** Can be added as its own file to an existing authorized Apps Script project. */
+export function reminderClockCode(config: { endpoint: string; key: string }) {
+  const full = bridgeCode(config);
+  const functions = full.slice(full.indexOf('function setupDaylightReminders()'), full.indexOf('function syncDaylight()'))
+    .replaceAll('DAYLIGHT.', 'DAYLIGHT_REMINDER_CLOCK.')
+    .replaceAll('setupDaylightReminders', 'setupDaylightReminderClock')
+    .replaceAll('stopDaylightReminders', 'stopDaylightReminderClock')
+    .replaceAll('tickDaylightReminders', 'tickDaylightReminderClock');
+  return `// Daylight reminder clock only. Keep the receiving key private.\nconst DAYLIGHT_REMINDER_CLOCK = ${JSON.stringify(config)};\n\n${functions}`;
+}
