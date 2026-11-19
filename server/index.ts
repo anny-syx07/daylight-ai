@@ -3,7 +3,7 @@ import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import { resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { get, set, remove, seal, update } from './store.js';
-import { allItems, syncAll, isSyncing, validateCanvas, disconnect, msal, cryptoProvider, microsoftReady, scopes, origin, publicError } from './connectors.js';
+import { allItems, syncAll, isSyncing, validateCanvas, normalizeCanvasToken, ProviderError, disconnect, msal, cryptoProvider, microsoftReady, scopes, origin, publicError } from './connectors.js';
 import { defaultSettings, pushKey, sendReminders } from './reminders.js';
 import type { Item, Connection } from '../src/types.js';
 const production = process.env.NODE_ENV === 'production';
@@ -71,27 +71,28 @@ app.get('/api/dashboard', async (_request, response) => {
     const raw = [...await allItems(), ...await get<Item[]>('manual', [])];
     const assignments = new Set(raw.filter(item => item.kind === 'assignment' && item.url).map(item => item.url));
     const items = raw.filter(item => !(['quiz', 'discussion'].includes(item.kind) && item.url && assignments.has(item.url))).map(item => ({ ...item, completed: item.completed || completed[item.id] || false }));
-    response.json({ items, connections: { canvas: await get<Connection>('connection:canvas', { connected: false }), outlook: await get<Connection>('connection:outlook', { connected: false }) }, settings: await get('settings', defaultSettings), pushKey, microsoftReady, passwordRequired: Boolean(password), serverless });
+    response.json({ items, connections: { canvas: { ...await get<Connection>('connection:canvas', { connected: false }), diagnostic: await get('canvas:last-check', null) }, outlook: await get<Connection>('connection:outlook', { connected: false }) }, settings: await get('settings', defaultSettings), pushKey, microsoftReady, passwordRequired: Boolean(password), serverless });
 });
 app.post('/api/connect/canvas', async (request, response) => {
     if (isSyncing()) {
         response.status(409).json({ error: 'Đang đồng bộ. Chờ một chút rồi kết nối lại nhé.' });
         return;
     }
-    const token = request.body.token;
-    if (typeof token !== 'string' || token.trim().length < 10 || token.length > 4096 || /\s/.test(token.trim())) {
-        response.status(400).json({ error: 'Nhập access token hợp lệ.' });
-        return;
-    }
+    let token: string;
+    try { token = normalizeCanvasToken(request.body.token); }
+    catch (error) { response.status(400).json({ error: (error as Error).message }); return; }
     try {
-        const profile = await validateCanvas(token.trim());
-        await set('canvas-token', seal(token.trim()));
+        const profile = await validateCanvas(token);
+        await set('canvas-token', seal(token));
+        await set('canvas:last-check', { checkedAt: new Date().toISOString(), ok: true, httpStatus: 200 });
         await set('connection:canvas', { connected: true, name: profile.name });
         if (serverless) await syncAll(); else void syncAll();
         response.json({ ok: true });
     }
     catch (error) {
-        response.status(400).json({ error: publicError(error) });
+        const diagnostic = { checkedAt: new Date().toISOString(), ok: false, httpStatus: error instanceof ProviderError ? error.status : null, reason: error instanceof ProviderError ? error.reason : 'network' };
+        await set('canvas:last-check', diagnostic);
+        response.status(400).json({ error: publicError(error), diagnostic });
     }
 });
 app.delete('/api/connect/:source', async (request, response) => { if (isSyncing()) {

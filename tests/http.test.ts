@@ -34,6 +34,11 @@ test('private API requires session and exact Origin; task changes persist and lo
     assert.equal(initial.connections.canvas.connected, false);
     assert.equal(initial.microsoftReady, false);
     assert.ok(!JSON.stringify(initial).includes(password));
+    const invalidCanvas = await fetch(`${origin}/api/connect/canvas`, { method: 'POST', headers, body: JSON.stringify({ token: 'synthetic broken token' }) });
+    assert.equal(invalidCanvas.status, 400);
+    const canvasError = await invalidCanvas.json();
+    assert.match(canvasError.error, /định dạng/);
+    assert.ok(!JSON.stringify(canvasError).includes('synthetic broken token'));
     assert.equal((await fetch(`${origin}/api/tasks`, { method: 'POST', headers: { ...headers, Origin: 'https://evil.example' }, body: JSON.stringify({ title: 'Blocked' }) })).status, 403);
     const taskResponse = await fetch(`${origin}/api/tasks`, { method: 'POST', headers, body: JSON.stringify({ title: 'Test task', due: null, course: 'Test' }) });
     assert.equal(taskResponse.status, 200);

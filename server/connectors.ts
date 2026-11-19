@@ -22,7 +22,16 @@ export function msal() {
     });
 }
 export class ProviderError extends Error {
-    constructor(public status: number) { super(status === 401 ? 'Phiên kết nối hết hạn. Hãy kết nối lại.' : status === 403 ? 'Tài khoản chưa được cấp quyền đọc mục này.' : status === 429 ? 'Dịch vụ đang giới hạn lượt truy cập. Sẽ thử lại ở lần đồng bộ sau.' : `Dịch vụ trả về lỗi ${status}.`); }
+    constructor(public status: number, public provider: 'canvas' | 'outlook' = 'canvas', public reason: 'rejected' | 'scope' | 'response' = 'rejected') {
+        const service = provider === 'canvas' ? 'Canvas' : 'Microsoft';
+        super(reason === 'scope' ? `${service} chưa cấp đủ quyền đọc mục này (HTTP ${status}).` : reason === 'response' ? `${service} trả về nội dung ngoài định dạng API. Hãy kiểm tra trang Canvas của trường hoặc thử lại sau.` : status === 401 ? provider === 'canvas' ? `Canvas chưa chấp nhận token (HTTP 401). Chưa thể kết luận token hết hạn. Kiểm tra token được tạo tại ${CANVAS}, sao chép đầy đủ chuỗi Token rồi thử lại.` : 'Microsoft chưa chấp nhận phiên đăng nhập (HTTP 401). Hãy kết nối lại.' : status === 403 ? `${service} chưa cấp quyền cho tài khoản đọc mục này (HTTP 403).` : status === 429 ? 'Dịch vụ đang giới hạn lượt truy cập. Sẽ thử lại ở lần đồng bộ sau.' : `${service} trả về lỗi HTTP ${status}.`);
+    }
+}
+export function normalizeCanvasToken(value: unknown): string {
+    if (typeof value !== 'string' || value.length > 4096) throw new Error('Chỉ dán giá trị Access token từ Canvas.');
+    const token = value.trim().replace(/^Bearer[ \t]+/i, '').trim();
+    if (token.length < 10 || /[^\x21-\x7e]/.test(token)) throw new Error('Token chưa đúng định dạng. Chỉ dán chuỗi Token đầy đủ, không kèm khoảng trắng ở giữa.');
+    return token;
 }
 export async function pages(path: string, token: string, provider: 'canvas' | 'outlook', fetcher: typeof fetch = fetch): Promise<any[]> {
     const base = provider === 'canvas' ? CANVAS : GRAPH;
@@ -38,9 +47,13 @@ export async function pages(path: string, token: string, provider: 'canvas' | 'o
             throw new Error('Dữ liệu vượt giới hạn đồng bộ.');
         visited.add(next);
         const response: Response = await fetcher(next, { headers: { Authorization: `Bearer ${token}`, ...(provider === 'outlook' ? { Prefer: 'outlook.timezone="UTC"' } : {}) }, redirect: 'error', signal: AbortSignal.timeout(20000) });
-        if (!response.ok)
-            throw new ProviderError(response.status);
-        const body: any = await response.json();
+        if (!response.ok) {
+            const scopeDenied = /\berror\s*=\s*"?insufficient_scope\b/i.test(response.headers.get('www-authenticate') || '');
+            throw new ProviderError(response.status, provider, scopeDenied ? 'scope' : 'rejected');
+        }
+        let body: any;
+        try { body = await response.json(); }
+        catch { throw new ProviderError(response.status, provider, 'response'); }
         result.push(...(Array.isArray(body) ? body : body.value || [body]));
         next = provider === 'outlook' ? body['@odata.nextLink'] : response.headers.get('link')?.match(/<([^>]+)>;\s*rel="next"/)?.[1];
     }
@@ -73,7 +86,11 @@ export async function disconnect(source: 'canvas' | 'outlook') {
         await remove(name);
     await set(`connection:${source}`, { connected: false });
 }
-export async function validateCanvas(token: string) { return (await pages('/api/v1/users/self/profile', token, 'canvas'))[0]; }
+export async function validateCanvas(token: string, fetcher: typeof fetch = fetch) {
+    const profile = (await pages('/api/v1/users/self/profile', token, 'canvas', fetcher))[0];
+    if (!profile || !Number.isInteger(profile.id) || profile.id <= 0) throw new ProviderError(200, 'canvas', 'response');
+    return profile;
+}
 export async function syncCanvas() {
     const token = await secret('canvas-token');
     if (!token)

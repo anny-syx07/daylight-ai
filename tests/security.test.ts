@@ -8,7 +8,7 @@ const directory = mkdtempSync(join(tmpdir(), 'daylight-test-'));
 process.env.DATA_DIR = directory;
 process.env.STORE_NAMESPACE = `test-security:${Date.now()}:`;
 const store = await import('../server/store.js');
-const { pages, safeUrl } = await import('../server/connectors.js');
+const { pages, safeUrl, normalizeCanvasToken, validateCanvas, publicError } = await import('../server/connectors.js');
 const { inQuietHours, reminderWindow, defaultSettings } = await import('../server/reminders.js');
 test('AES-GCM encrypts secrets and rejects tampering', () => {
   const token = 'synthetic-test-value';
@@ -52,6 +52,34 @@ test('external pagination cannot exfiltrate credentials', async () => {
 test('pagination loops and provider access failures are surfaced', async () => {
   await assert.rejects(pages('/api/v1/courses', 'synthetic', 'canvas', async () => new Response('[]', { headers: { link: '<https://umthcm.instructure.com/api/v1/courses>; rel="next"' } })));
   await assert.rejects(pages('/api/v1/courses', 'synthetic', 'canvas', async () => new Response('{}', { status: 403 })), /quyền/);
+});
+test('a Canvas 401 does not claim a newly created token has expired or echo provider secrets', async () => {
+  const synthetic = 'synthetic-test-credential';
+  await assert.rejects(pages('/api/v1/users/self/profile', synthetic, 'canvas', async () => new Response(JSON.stringify({ errors: [{ message: synthetic }] }), { status: 401, headers: { 'www-authenticate': 'Bearer realm="canvas-lms"' } })), error => {
+    const message = publicError(error);
+    assert.match(message, /HTTP 401/);
+    assert.match(message, /Chưa thể kết luận/);
+    assert.ok(!message.includes(synthetic));
+    assert.ok(!message.includes('Phiên kết nối hết hạn'));
+    return true;
+  });
+});
+test('Canvas reports missing scope separately from token rejection', async () => {
+  await assert.rejects(pages('/api/v1/users/self/profile', 'synthetic', 'canvas', async () => new Response('{}', { status: 401, headers: { 'www-authenticate': 'Bearer error="insufficient_scope"' } })), /chưa cấp đủ quyền/);
+});
+test('Canvas token normalization accepts copied Bearer prefixes but rejects broken values without echoing them', () => {
+  assert.equal(normalizeCanvasToken('  synthetic-test-token  '), 'synthetic-test-token');
+  assert.equal(normalizeCanvasToken('Bearer synthetic-test-token'), 'synthetic-test-token');
+  assert.equal(normalizeCanvasToken('bearer\tsynthetic-test-token'), 'synthetic-test-token');
+  assert.throws(() => normalizeCanvasToken('synthetic test token'), /định dạng/);
+  assert.throws(() => normalizeCanvasToken(undefined));
+  assert.throws(() => normalizeCanvasToken('abc'));
+});
+test('Canvas validation rejects login HTML and empty profile responses', async () => {
+  await assert.rejects(validateCanvas('synthetic', async () => new Response('<html>Login</html>')), /định dạng API/);
+  await assert.rejects(validateCanvas('synthetic', async () => new Response('{}')), /định dạng API/);
+  const profile = await validateCanvas('synthetic', async () => new Response('{"id":123,"name":"Test account"}'));
+  assert.equal(profile.id, 123);
 });
 test('Graph pagination follows opaque nextLink', async () => {
   let calls = 0;
