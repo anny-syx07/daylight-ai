@@ -303,9 +303,10 @@ app.post('/api/push', async (request, response) => {
     await bindDevice({ endpoint: subscription.endpoint, keys: { p256dh: subscription.keys.p256dh, auth: subscription.keys.auth } });
     response.json({ ok: true });
 });
-app.use(express.static(resolve('dist'), { index: false }));
-app.get('/{*path}', (_request, response) => { if (existsSync('dist/index.html'))
-    response.sendFile('index.html', { root: resolve('dist') });
+app.use(express.static(resolve('dist'), { index: false,redirect:false }));
+app.get('/{*path}', (request, response) => { if (existsSync('dist/index.html')){
+    const page=['/huong-dan','/quyen-rieng-tu','/dieu-khoan'].find(path=>request.path===path||request.path===path+'/');
+    response.sendFile(page?`${page.slice(1)}/index.html`:'index.html', { root: resolve('dist') });}
 else
     response.status(404).send('Open http://localhost:5173 for development.'); });
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => { response.status(500).json({ error: 'Có lỗi khi xử lý. Hãy thử lại.' }); });

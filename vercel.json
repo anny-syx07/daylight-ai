@@ -14,7 +14,19 @@
       "destination": "/api/index"
     },
     {
-      "source": "/(.*)",
+      "source": "/huong-dan",
+      "destination": "/huong-dan/index.html"
+    },
+    {
+      "source": "/quyen-rieng-tu",
+      "destination": "/quyen-rieng-tu/index.html"
+    },
+    {
+      "source": "/dieu-khoan",
+      "destination": "/dieu-khoan/index.html"
+    },
+    {
+      "source": "/((?!api/|assets/|.*\\.[^/]+$).*)",
       "destination": "/index.html"
     }
   ],
@@ -43,11 +55,38 @@
       ]
     },
     {
-      "source": "/(app|owner|api)(.*)",
+      "source": "/app",
       "headers": [
         {
           "key": "X-Robots-Tag",
           "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
+      "source": "/owner",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
+      "source": "/api/:path*",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
+      "source": "/googlee92d32c120829c65.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
         }
       ]
     }

@@ -46,7 +46,7 @@ export function CanvasHelp({ compact = false,canvasUrl }: { compact?: boolean;ca
 }
 
 export function OutlookHelp() {
-  const callback = `${window.location.origin}/api/oauth/microsoft`;
+  const callback = `${typeof window==='undefined'?'https://daylight-ai-three.vercel.app':window.location.origin}/api/oauth/microsoft`;
   const adminRequest = `Chào bộ phận IT, em muốn kết nối ứng dụng học tập cá nhân Daylight AI với Microsoft 365 của trường. Nhờ anh/chị hỗ trợ đăng ký hoặc phê duyệt ứng dụng trong tenant trường: loại Web, single tenant; Redirect URI: ${callback}; Microsoft Graph delegated permissions: User.Read, Mail.Read, Calendars.Read. Ứng dụng chỉ đọc email và lịch của tài khoản đăng nhập. Nếu chính sách trường không cho phép, nhờ anh/chị hướng dẫn phương án phù hợp. Em cảm ơn.`;
   return <div className="connection-steps">
     <div className="guide-callout"><strong>Muốn dùng ngay qua Gmail cá nhân?</strong><p>Bạn có thể thử chuyển tiếp thư sang Gmail và dùng cầu nối bên dưới. Không cần đăng ký ứng dụng trong Entra cho cách này. <a href="#gmail">Xem hướng dẫn Gmail ↓</a></p></div>

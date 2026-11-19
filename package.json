@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "concurrently -k \"tsx watch --env-file-if-exists=.env server/index.ts\" \"vite --host 127.0.0.1\"",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && tsx scripts/render-public.tsx",
     "start": "tsx --env-file-if-exists=.env server/index.ts",
     "test": "tsx --test tests/*.test.ts"
   },

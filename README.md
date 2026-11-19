@@ -84,3 +84,13 @@ Each workspace stores its own `canvas-origin` alongside the encrypted token. Ent
 Existing connections without `canvas-origin` keep the original UMT origin. No token is migrated to a different school. Profile validation succeeds at the candidate origin before changing the connection. A successful school change clears the former Canvas partitions, completion/snoozes and queued Canvas alerts; Gmail, personal items and explicitly imported snapshots stay intact. Same numeric assignment IDs from different schools do not share imported deadline fallbacks.
 
 Every Canvas socket uses an Undici dispatcher whose DNS lookup accepts only public unicast IPv4/IPv6 answers. The validated addresses are supplied directly to the socket, blocking DNS rebinding and private/metadata/loopback targets; mixed public/private answers are rejected. TLS certificate validation remains enabled. Pagination remains on the chosen origin under `/api/v1/`; redirects are refused. Sync, connection replacement and disconnect share the same workspace-scoped lease. Settings/token/calendar links are derived from the selected school. SIS remains a separate UMT-specific integration.
+
+### Public metadata and Google ownership
+
+This is a React/Vite app. Public assets belong in `public/`; Vite copies them to the `dist/` root. Google ownership file `public/googlee92d32c120829c65.html` is the exact supplied file and must remain deployed after verification. Its public URL is `https://daylight-ai-three.vercel.app/googlee92d32c120829c65.html`.
+
+`index.html` contains SEO, Open Graph, Twitter and iOS metadata. Build also renders complete public HTML for home, guide, privacy and terms via `scripts/render-public.tsx`, with page-specific canonical URLs and metadata. `vercel.json` routes those pages to their rendered files; its SPA fallback excludes static file paths, so Google verification, images, robots and sitemap cannot turn into the homepage. App, owner and API responses remain noindex/protected.
+
+The committed `public/og-image.png` is 1200×630 and contains only brand art plus a labelled illustrative phone, not private student data. PNG app icons and Apple touch icon are included. Optional art regeneration: `python3 scripts/generate-social-assets.py /path/to/Nunito.ttf` (Pillow and fontTools required; official Nunito font under OFL). Build does not require Python or re-download art.
+
+After deployment, open the exact Google file URL and press Verify in Search Console. Submit `sitemap.xml` there separately. HTML metadata and a sitemap do not guarantee indexing, ranking, or a platform clearing its old link-preview cache. Actual Zalo/Messenger/Discord sharing should be checked in those services.
