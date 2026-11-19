@@ -1,5 +1,11 @@
 # Free personal hosting: Vercel Hobby + Neon Free
 
+Production: **https://daylight-ai-three.vercel.app**
+
+Microsoft Web redirect URI: `https://daylight-ai-three.vercel.app/api/oauth/microsoft`.
+
+The current deployment was uploaded directly because Vercel's GitHub integration could not access `anny-syx07/daylight-ai`. The source is pushed to that repository, but GitHub pushes do not yet trigger Vercel deployments. To enable that, authorize the repository in Vercel's GitHub App installation and connect it under Project → Settings → Git. Do not assume a successful GitHub push has deployed until that connection is configured.
+
 This deployment profile uses a Vite static frontend and `api/index.ts` Express API. Neon Postgres persists records, encrypted provider tokens, OAuth state, VAPID keys and sessions across Vercel invocations. No writable disk is required. Local use and Render still support SQLite when `DATABASE_URL` is absent.
 
 ## Required environment values

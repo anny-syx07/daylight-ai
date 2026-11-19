@@ -2,6 +2,8 @@
 
 A calm personal study PWA: Canvas LMS, school Outlook, deadlines and reminders.
 
+Live app: **https://daylight-ai-three.vercel.app** · Vercel Hobby + Neon Free.
+
 ```sh
 npm ci
 cp .env.example .env
