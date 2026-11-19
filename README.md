@@ -22,6 +22,16 @@ For free hosting, use [Vercel + Neon setup](VERCEL.md). For a continuously runni
 
 The UI uses locally bundled Nunito with Vietnamese support for a softer, more readable study space.
 
+### Source automation and new-message alerts
+
+Connections now shows separate flags for automatic, conditional, stale, manual and unavailable sources. Granting access is not treated as proof of a running bridge. Canvas auto-refresh defaults on, runs about every 30–40 minutes through the existing Google reminder clock, honors its own off switch, and retains manual refresh. Source work runs after the reminder response with `waitUntil`, so slow Canvas endpoints do not hold up the clock response. Both the source interval and a distributed lease prevent repeated syncs. The daily cron remains a fallback. Partial Canvas permissions remain visible.
+
+Gmail uses its actual receiving heartbeat and only includes mail with the Daylight label. SIS remains conditional on the local Chrome bridge, an awake computer and a valid school session; generating/downloading its key is not treated as a successful sync. Imported ICS/EML files require reimport. An ICS date filling a missing Canvas API due date retains a manual-date flag. Native Outlook remains unavailable. Personal tasks have no external feed to update.
+
+New Gmail messages and new Canvas announcements, discussions, assignments and quizzes enter a durable outbox after a one-time baseline of existing data. Repeated imports/syncs do not enqueue the same ID again. Successful provider acceptance is tracked per device; transient failures retain pending work with retry/backoff, and expired subscriptions are removed and flagged. Up to 500 jobs remain pending at once; unqueued new IDs remain unseen for a later scan instead of being silently discarded. Quiet hours hold new-message jobs until later. Disabling new-message alerts is separate from deadline reminders. The source must first deliver the item to Daylight; neither inaccessible Canvas resources nor unlabelled/unforwarded emails can generate alerts.
+
+The server does not claim that push-provider acceptance proves a banner appeared, or that web apps can override notification permissions, Focus, Silent mode, battery policies or network outages. Settings includes banner/sound guidance and the closed-app 15-second sound test.
+
 ### Mobile reminders with sound
 
 The shared owner workspace supports responsive iPhone and Android layouts; each phone registers its own Web Push subscription. iPhone requires iOS 16.4+ and a Home Screen installation. In Settings, enable notifications, then choose **Thử sau 15 giây** and close the app/lock the phone. The test runs on the server via Vercel `waitUntil`; the app does not claim delivery or sound until the owner confirms hearing it on that device. Push explicitly requests `silent: false`, Android vibration/re-notification and high delivery urgency. Sound remains subject to OS permissions, volume, Focus/Do Not Disturb and network availability; this is not a critical-alert entitlement or a delivery guarantee.

@@ -10,6 +10,8 @@ import { defaultSettings, pushKey, sendReminders, runReminderClock, prepareTestP
 import type { Item, Connection } from '../src/types.js';
 import { previewImport, commitImport, importStatus, gmailAuthorized, receiveGmail, gmailSetup } from './imports.js';
 import { sisAuthorized, sisSetup, receiveSis, revokeSis } from './sis-bridge.js';
+import { canvasAutomation, maybeAutoSyncCanvas } from './auto-sync.js';
+import { collectNewMessages, deliverNewMessages, notificationStatus } from './notifications.js';
 const production = process.env.NODE_ENV === 'production';
 const serverless = Boolean(process.env.VERCEL);
 const password = process.env.APP_PASSWORD;
@@ -47,14 +49,17 @@ app.get('/api/health', (_request, response) => response.json({ ok: true }));
 app.get('/api/cron', async (request, response) => {
     const expected = process.env.CRON_SECRET;
     if (!expected || !timingSafeEqual(digest(request.headers.authorization || ''), digest(`Bearer ${expected}`))) { response.sendStatus(401); return; }
-    await syncAll();
+    await collectNewMessages();
+    await maybeAutoSyncCanvas();
+    await collectNewMessages();
+    waitUntil(deliverNewMessages().catch(() => {}));
     await sendReminders();
     response.json({ ok: true });
 });
 app.get('/api/session', async (request, response) => response.json({ authenticated: await authorized(request), passwordRequired: Boolean(password) }));
 app.post('/api/imports/gmail/receive', async (request, response) => {
     if (!await gmailAuthorized(request.headers.authorization)) { response.sendStatus(401); return; }
-    try { response.json(await receiveGmail(request.body)); }
+    try { await collectNewMessages(); const result = await receiveGmail(request.body); await collectNewMessages(); waitUntil(deliverNewMessages().catch(() => {})); response.json(result); }
     catch { response.status(400).json({ error: 'Gói email không hợp lệ hoặc đã đạt giới hạn lưu trữ.' }); }
 });
 app.post('/api/imports/sis/receive', async (request, response) => {
@@ -64,7 +69,11 @@ app.post('/api/imports/sis/receive', async (request, response) => {
 });
 app.post('/api/reminders/tick', async (request, response) => {
     if (!await gmailAuthorized(request.headers.authorization)) { response.sendStatus(401); return; }
-    response.json(await runReminderClock());
+    const clock = await runReminderClock();
+    await collectNewMessages();
+    const news = await notificationStatus();
+    waitUntil(Promise.allSettled([deliverNewMessages(), maybeAutoSyncCanvas().then(async () => { await collectNewMessages(); await deliverNewMessages(); await sendReminders(); })]));
+    response.json({ nextCheckAt: news.pending && news.devices && !news.quiet && news.enabled ? Math.min(clock.nextCheckAt, Math.max(Date.now() + 60000, news.nextRetry || 0)) : clock.nextCheckAt });
 });
 app.post('/api/login', async (request, response) => {
     const bucket = await update('login-attempts', { count: 0, reset: 0 }, previous => previous.reset < Date.now() ? { count: 1, reset: Date.now() + 900000 } : { ...previous, count: previous.count + 1 });
@@ -91,7 +100,13 @@ app.get('/api/dashboard', async (_request, response) => {
     const raw = [...await allItems(), ...await get<Item[]>('manual', [])];
     const assignments = new Set(raw.filter(item => item.kind === 'assignment' && item.url).map(item => item.url));
     const items = raw.filter(item => !(['quiz', 'discussion'].includes(item.kind) && item.url && assignments.has(item.url))).map(item => ({ ...item, completed: item.completed || completed[item.id] || false }));
-    response.json({ items, connections: { canvas: { ...await get<Connection>('connection:canvas', { connected: false }), diagnostic: await get('canvas:last-check', null) }, outlook: await get<Connection>('connection:outlook', { connected: false }) }, imports: await importStatus(), settings: await get('settings', defaultSettings), reminderClock: await get('reminder:clock', null), pushKey, microsoftReady, passwordRequired: Boolean(password), serverless });
+    response.json({ items, connections: { canvas: { ...await get<Connection>('connection:canvas', { connected: false }), diagnostic: await get('canvas:last-check', null) }, outlook: await get<Connection>('connection:outlook', { connected: false }) }, imports: await importStatus(), automation: { canvas: await canvasAutomation() }, notifications: await notificationStatus(), settings: await get('settings', defaultSettings), reminderClock: await get('reminder:clock', null), pushKey, microsoftReady, passwordRequired: Boolean(password), serverless });
+});
+app.patch('/api/automation/canvas', async (request, response) => {
+    if (typeof request.body.enabled !== 'boolean') { response.sendStatus(400); return; }
+    await set('automation:canvas-enabled', request.body.enabled);
+    if (request.body.enabled) waitUntil(collectNewMessages().then(() => maybeAutoSyncCanvas()).then(async () => { await collectNewMessages(); await deliverNewMessages(); await sendReminders(); }).catch(() => {}));
+    response.json({ enabled: request.body.enabled });
 });
 app.post('/api/imports/preview', async (request, response) => {
     try { response.json(await previewImport(request.body.filename, request.body.content)); }
@@ -147,7 +162,9 @@ app.delete('/api/connect/:source', async (request, response) => { if (isSyncing(
     response.sendStatus(400);
     return;
 } await disconnect(request.params.source as 'canvas' | 'outlook'); response.json({ ok: true }); });
-app.post('/api/sync', async (_request, response) => { await syncAll(); await sendReminders(); response.json({ ok: true }); });
+app.post('/api/sync', async (_request, response) => { await collectNewMessages(); await syncAll(); await collectNewMessages(); waitUntil(deliverNewMessages().catch(() => {})); await sendReminders(); response.json({ ok: true }); });
+app.post('/api/notifications/scan', async (_request, response) => { await collectNewMessages(); waitUntil(deliverNewMessages().catch(() => {})); response.json(await notificationStatus()); });
+app.patch('/api/notifications/settings', async (request, response) => { if(typeof request.body.enabled!=='boolean'){response.sendStatus(400);return;} await set('notifications:enabled',request.body.enabled); response.json({enabled:request.body.enabled}); });
 app.post('/api/reminders/check', async (_request, response) => { await sendReminders(); response.json({ ok: true }); });
 app.post('/api/push/test', async (request, response) => {
     try {
@@ -266,8 +283,9 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
 export default app;
 if (!serverless) {
     const server = app.listen(Number(process.env.PORT || 3001), process.env.HOST || (production ? '0.0.0.0' : '127.0.0.1'), () => console.log('Daylight server ready'));
-    const syncTimer = setInterval(() => { void syncAll(); }, 10 * 60000);
+    const syncTimer = setInterval(() => { void maybeAutoSyncCanvas().catch(() => {}); }, 60000);
     const reminderTimer = setInterval(() => { void sendReminders(); }, 60000);
-    void syncAll();
-    process.on('SIGTERM', () => { clearInterval(syncTimer); clearInterval(reminderTimer); server.close(); });
+    const newsTimer = setInterval(() => { void collectNewMessages().then(deliverNewMessages).catch(() => {}); }, 60000);
+    void maybeAutoSyncCanvas().catch(() => {});
+    process.on('SIGTERM', () => { clearInterval(syncTimer); clearInterval(reminderTimer); clearInterval(newsTimer); server.close(); });
 }

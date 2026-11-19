@@ -34,6 +34,12 @@ test('private API requires session and exact Origin; task changes persist and lo
     assert.deepEqual(initial.items, []);
     assert.equal(initial.connections.canvas.connected, false);
     assert.equal(initial.microsoftReady, false);
+    assert.equal(initial.automation.canvas.enabled,true);
+    assert.equal((await fetch(`${origin}/api/automation/canvas`,{method:'PATCH',headers:{...headers,Origin:'https://evil.example'},body:JSON.stringify({enabled:false})})).status,403);
+    assert.equal((await fetch(`${origin}/api/automation/canvas`,{method:'PATCH',headers,body:JSON.stringify({enabled:'yes'})})).status,400);
+    assert.equal((await fetch(`${origin}/api/automation/canvas`,{method:'PATCH',headers,body:JSON.stringify({enabled:false})})).status,200);
+    assert.equal((await (await fetch(`${origin}/api/dashboard`,{headers})).json()).automation.canvas.enabled,false);
+    assert.equal((await fetch(`${origin}/api/notifications/scan`,{method:'POST',headers:{'Content-Type':'application/json',Origin:origin},body:'{}'})).status,401);
     assert.ok(!JSON.stringify(initial).includes(password));
     const invalidCanvas = await fetch(`${origin}/api/connect/canvas`, { method: 'POST', headers, body: JSON.stringify({ token: 'synthetic broken token' }) });
     assert.equal(invalidCanvas.status, 400);
@@ -79,6 +85,8 @@ test('private API requires session and exact Origin; task changes persist and lo
     assert.equal(imported.items[0].due, null);
     assert.equal(imported.connections.outlook.connected, false);
     assert.equal(imported.imports.gmail.receivedCount, 1);
+    assert.equal(imported.notifications.pending,1);
+    assert.equal((await fetch(`${origin}/api/notifications/settings`,{method:'PATCH',headers,body:JSON.stringify({enabled:'yes'})})).status,400);
     assert.ok(!JSON.stringify(imported).includes(config.key));
     await fetch(`${origin}/api/imports/gmail/setup`, { method: 'DELETE', headers });
     assert.equal((await receive()).status, 401);
