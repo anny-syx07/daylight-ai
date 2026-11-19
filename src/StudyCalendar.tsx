@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
-import type { Item } from './types';
+import type { Item, SisStatus } from './types';
 import { chronological, dateFromKey, dayKey, isDeadline, itemDayKey, shortTime } from './studyModel';
 import './study.css';
 
-export function StudyCalendar({ items, initialDay, row, onAdd }: { items: Item[]; initialDay: string; row: (item: Item) => ReactNode; onAdd: () => void }) {
+export function StudyCalendar({ items, initialDay, row, onAdd, sis, onConnections }: { items: Item[]; initialDay: string; row: (item: Item) => ReactNode; onAdd: () => void; sis?: SisStatus; onConnections: () => void }) {
   const selectedDate = dateFromKey(initialDay);
   const [selected, setSelected] = useState(initialDay);
   const [month, setMonth] = useState(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
@@ -25,6 +25,7 @@ export function StudyCalendar({ items, initialDay, row, onAdd }: { items: Item[]
   function moveMonth(offset: number) { const next = new Date(month.getFullYear(), month.getMonth() + offset, 1); setMonth(next); setSelected(dayKey(next)); }
   function agenda(entries: Item[]) { return <>{(['deadlines', 'classes'] as const).map(group => { const values = entries.filter(item => group === 'classes' ? item.kind === 'event' : isDeadline(item)); return values.length ? <div className={`agenda-group ${group}`} key={group}><h3><i/>{group === 'classes' ? 'Lịch học' : 'Deadline'}<span>{values.length}</span></h3>{values.map(row)}</div> : null; })}</>; }
   return <section className="study-calendar">
+    {!!sis?.count && <p className="privacy-note">SIS · {sis.error || (sis.lastChecked ? `Kiểm tra ${new Date(sis.lastChecked).toLocaleString('vi-VN')}${Date.now() - Date.parse(sis.lastChecked) > 7200000 ? ' · cần kiểm tra lại' : ''}` : sis.configured ? 'Chờ cầu nối kiểm tra' : 'Bản nhập · chưa bật cập nhật')} <button className="text-button" onClick={onConnections}>Cập nhật lịch ↗</button></p>}
     <div className="calendar-tools"><div className="segmented" aria-label="Lọc lịch">{[['all', 'Tất cả'], ['deadlines', 'Deadline'], ['classes', 'Lịch học']].map(([id, label]) => <button key={id} aria-pressed={filter === id} className={filter === id ? 'active' : ''} onClick={() => setFilter(id)}>{label}</button>)}</div><div className="calendar-search"><Search size={16}/><input aria-label="Tìm trong lịch" value={query} placeholder="Tìm lịch…" onChange={event => setQuery(event.target.value)}/></div><select aria-label="Lọc môn trong lịch" value={course} onChange={event => setCourse(event.target.value)}><option value="all">Tất cả môn</option>{courses.map(value => <option key={value}>{value}</option>)}</select></div>
     <div className="study-calendar-layout"><div className="panel month-panel"><div className="month-heading"><div className="inline"><button className="icon-button" aria-label="Tháng trước" onClick={() => moveMonth(-1)}><ChevronLeft size={19}/></button><h2>{month.toLocaleString('vi-VN', { month: 'long', year: 'numeric' })}</h2><button className="icon-button" aria-label="Tháng sau" onClick={() => moveMonth(1)}><ChevronRight size={19}/></button></div><div className="inline"><button className="secondary" onClick={() => { setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1)); setSelected(today); }}>Hôm nay</button><div className="segmented calendar-view" aria-label="Kiểu xem lịch"><button className={view === 'month' ? 'active' : ''} aria-pressed={view === 'month'} onClick={() => setView('month')}>Tháng</button><button className={view === 'list' ? 'active' : ''} aria-pressed={view === 'list'} onClick={() => setView('list')}>Danh sách</button></div></div></div>
       <div className="study-legend"><span><i className="assignment"/>Deadline</span><span><i className="quiz"/>Kiểm tra</span><span><i className="event"/>Lịch học</span></div>

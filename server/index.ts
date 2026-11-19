@@ -7,6 +7,7 @@ import { allItems, syncAll, isSyncing, validateCanvas, normalizeCanvasToken, Pro
 import { defaultSettings, pushKey, sendReminders } from './reminders.js';
 import type { Item, Connection } from '../src/types.js';
 import { previewImport, commitImport, importStatus, gmailAuthorized, receiveGmail, gmailSetup } from './imports.js';
+import { sisAuthorized, sisSetup, receiveSis, revokeSis } from './sis-bridge.js';
 const production = process.env.NODE_ENV === 'production';
 const serverless = Boolean(process.env.VERCEL);
 const password = process.env.APP_PASSWORD;
@@ -15,6 +16,7 @@ if (production && (!password || password.length < 16 || !origin.startsWith('http
 const app = express();
 app.disable('x-powered-by');
 app.use('/api/imports/preview', express.json({ limit: '1500kb' }));
+app.use('/api/imports/sis/receive', express.json({ limit: '1mb' }));
 app.use(express.json({ limit: '32kb' }));
 app.use((request, response, next) => {
     response.set({ 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY', 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'", 'Permissions-Policy': 'camera=(), microphone=(), geolocation=()' });
@@ -22,7 +24,7 @@ app.use((request, response, next) => {
         response.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     if (request.path.startsWith('/api'))
         response.set('Cache-Control', 'no-store');
-    if (request.path.startsWith('/api') && !['GET', 'HEAD'].includes(request.method) && request.headers.origin !== origin && !(request.method === 'POST' && request.path === '/api/imports/gmail/receive')) {
+    if (request.path.startsWith('/api') && !['GET', 'HEAD'].includes(request.method) && request.headers.origin !== origin && !(request.method === 'POST' && ['/api/imports/gmail/receive', '/api/imports/sis/receive'].includes(request.path))) {
         response.status(403).json({ error: 'Nguồn yêu cầu không hợp lệ.' });
         return;
     }
@@ -52,6 +54,11 @@ app.post('/api/imports/gmail/receive', async (request, response) => {
     if (!await gmailAuthorized(request.headers.authorization)) { response.sendStatus(401); return; }
     try { response.json(await receiveGmail(request.body)); }
     catch { response.status(400).json({ error: 'Gói email không hợp lệ hoặc đã đạt giới hạn lưu trữ.' }); }
+});
+app.post('/api/imports/sis/receive', async (request, response) => {
+    if (!await sisAuthorized(request.headers.authorization)) { response.sendStatus(401); return; }
+    try { response.json(await receiveSis(request.body)); }
+    catch { response.status(400).json({ error: 'Chưa đọc đủ lịch SIS hoặc phiên kiểm tra đã cũ. Lịch đang lưu được giữ nguyên.' }); }
 });
 app.post('/api/login', async (request, response) => {
     const bucket = await update('login-attempts', { count: 0, reset: 0 }, previous => previous.reset < Date.now() ? { count: 1, reset: Date.now() + 900000 } : { ...previous, count: previous.count + 1 });
@@ -93,6 +100,13 @@ app.delete('/api/imports/items/:id', async (request, response) => {
     response.json({ ok: true });
 });
 app.get('/api/imports/gmail/setup', async (_request, response) => response.json(await gmailSetup(origin)));
+app.post('/api/imports/sis/setup', async (_request, response) => {
+    try {
+        const bytes = await sisSetup(origin);
+        response.set('Content-Type', 'application/zip').set('Content-Disposition', 'attachment; filename="Daylight-SIS.zip"').send(Buffer.from(bytes));
+    } catch { response.status(400).json({ error: 'Nhập lại tệp thời khóa biểu SIS trước khi tải cầu nối nhé.' }); }
+});
+app.delete('/api/imports/sis/setup', async (_request, response) => { await revokeSis(); response.json({ ok: true }); });
 app.post('/api/imports/gmail/setup', async (_request, response) => response.json(await gmailSetup(origin, true)));
 app.delete('/api/imports/gmail/setup', async (_request, response) => {
     await remove('gmail:secret'); await remove('gmail:status');

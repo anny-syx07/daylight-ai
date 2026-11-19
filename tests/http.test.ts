@@ -5,6 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
+import { unzipSync, strFromU8 } from 'fflate';
 
 test('private API requires session and exact Origin; task changes persist and logout revokes access', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'daylight-http-'));
@@ -76,6 +77,27 @@ test('private API requires session and exact Origin; task changes persist and lo
     assert.ok(!JSON.stringify(imported).includes(config.key));
     await fetch(`${origin}/api/imports/gmail/setup`, { method: 'DELETE', headers });
     assert.equal((await receive()).status, 401);
+    assert.equal((await fetch(`${origin}/api/imports/sis/receive`, { method:'POST',headers:{'Content-Type':'application/json'},body:'{}' })).status,401);
+    assert.equal((await fetch(`${origin}/api/imports/sis/setup`, { method:'POST',headers:{'Content-Type':'application/json',Origin:origin},body:'{}' })).status,401);
+    assert.equal((await fetch(`${origin}/api/imports/sis/setup`, { method:'POST',headers:{...headers,Origin:'https://evil.example'},body:'{}' })).status,403);
+    const schedule={schema:'daylight.sis-schedule.v1',term:'FALL_2026',timezone:'Asia/Ho_Chi_Minh',capturedAt:new Date().toISOString(),courses:[{name:'Synthetic',code:'1',source:'https://sis.umt.edu.vn/attendance/aaaa-bbbb',rows:[{date:'20/11/2026',time:'07:00 - 09:30',type:'LEC',room:'P.404'}]}]};
+    const sisPreview=await (await fetch(`${origin}/api/imports/preview`,{method:'POST',headers,body:JSON.stringify({filename:'FALL_2026.sis.json',content:Buffer.from(JSON.stringify(schedule)).toString('base64')})})).json();
+    assert.equal((await fetch(`${origin}/api/imports/confirm`,{method:'POST',headers,body:JSON.stringify({id:sisPreview.id})})).status,200);
+    const sisZipResponse=await fetch(`${origin}/api/imports/sis/setup`,{method:'POST',headers,body:'{}'});
+    assert.equal(sisZipResponse.status,200);assert.equal(sisZipResponse.headers.get('cache-control'),'no-store');
+    const sisZip=unzipSync(new Uint8Array(await sisZipResponse.arrayBuffer()));
+    const sisConfig=JSON.parse(strFromU8(sisZip['config.json']));
+    const sisHeaders={'Content-Type':'application/json',Authorization:`Bearer ${sisConfig.key}`};
+    assert.equal((await fetch(`${origin}/api/dashboard`,{headers:sisHeaders})).status,401);
+    assert.equal((await fetch(`${origin}/api/imports/sis/receive`,{method:'POST',headers:inboundHeaders,body:JSON.stringify(schedule)})).status,401);
+    assert.equal((await fetch(`${origin}/api/imports/sis/receive`,{method:'POST',headers:sisHeaders,body:JSON.stringify(schedule)})).status,200);
+    const sisDashboard=await (await fetch(`${origin}/api/dashboard`,{headers})).json();
+    assert.equal(sisDashboard.imports.sis.count,1);assert.ok(sisDashboard.imports.sis.lastChecked);
+    assert.ok(!JSON.stringify(sisDashboard).includes(sisConfig.key));
+    await fetch(`${origin}/api/imports/sis/setup`,{method:'DELETE',headers});
+    assert.equal((await fetch(`${origin}/api/imports/sis/receive`,{method:'POST',headers:sisHeaders,body:JSON.stringify(schedule)})).status,401);
+    const sisItem=sisDashboard.items.find((i:any)=>i.kind==='event');
+    await fetch(`${origin}/api/imports/items/${encodeURIComponent(sisItem.id)}`,{method:'DELETE',headers});
     const emailContent = Buffer.from('From: test@example.edu\r\nSubject: Imported email\r\n\r\n' + 'x'.repeat(40000)).toString('base64');
     const preview = await (await fetch(`${origin}/api/imports/preview`, { method: 'POST', headers, body: JSON.stringify({ filename: 'test.eml', content: emailContent }) })).json();
     assert.ok(preview.id);

@@ -82,14 +82,17 @@ export async function commitImport(id: unknown) {
     return next;
   });
   await set('import:last', new Date().toISOString());
-  if (preview.group.startsWith('sis:')) await set('sis:last-import', new Date().toISOString());
+  if (preview.group.startsWith('sis:')) {
+    await set('sis:last-import', new Date().toISOString());
+    if (preview.sisCatalog) await set('sis:catalog', preview.sisCatalog);
+  }
   await remove('import:preview');
   return { count: preview.items.length };
 }
 export async function importStatus(): Promise<ImportStatus> {
   const configured = Boolean(await get('gmail:secret', null));
   const items = await get<Item[]>('imported', []);
-  return { count: items.length, gmail: { ...await get('gmail:status', {}), receivedCount: items.filter(item => item.importGroup === 'gmail').length, configured }, lastImported: await get<string | undefined>('import:last', undefined), sis: { count: items.filter(item => item.importGroup?.startsWith('sis:')).length, lastImported: await get<string | undefined>('sis:last-import', undefined) } };
+  return { count: items.length, gmail: { ...await get('gmail:status', {}), receivedCount: items.filter(item => item.importGroup === 'gmail').length, configured }, lastImported: await get<string | undefined>('import:last', undefined), sis: { ...await get('sis:status', {}), count: items.filter(item => item.importGroup?.startsWith('sis:')).length, configured: Boolean(await get('sis:secret', null)), lastImported: await get<string | undefined>('sis:last-import', undefined) } };
 }
 export async function gmailAuthorized(header: string | undefined) {
   const key = await secret('gmail:secret');

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Item, ImportPreview } from '../src/types.js';
+import type { Item, ImportPreview, SisCatalog } from '../src/types.js';
 
 const clean = (value: unknown, limit: number) => typeof value === 'string' ? value.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, limit) : '';
 function timestamp(date: unknown, time: string) {
@@ -16,12 +16,15 @@ export function parseSisSchedule(input: unknown): Omit<ImportPreview, 'id'> {
   if (!data || data.schema !== 'daylight.sis-schedule.v1' || typeof data.term !== 'string' || !/^[A-Z]+_20\d{2}$/.test(data.term) || data.timezone !== 'Asia/Ho_Chi_Minh' || !Array.isArray(data.courses) || !data.courses.length || data.courses.length > 30) throw new Error('Tệp SIS chưa đúng định dạng thời khóa biểu.');
   const group = `sis:${data.term}`;
   const items: Item[] = [];
+  const catalog: SisCatalog = { term: data.term, courses: [] };
   let cancelled = 0;
   for (const course of data.courses) {
     if (!course || typeof course !== 'object' || !Array.isArray(course.rows) || course.rows.length > 200 || !/^[A-Za-z0-9_-]{1,50}$/.test(course.code || '') || !clean(course.name, 200)) throw new Error('Tệp SIS thiếu mã hoặc tên môn học.');
     let source: URL;
     try { source = new URL(course.source); } catch { throw new Error('Tệp SIS thiếu đường dẫn nguồn.'); }
-    if (source.origin !== 'https://sis.umt.edu.vn' || !/^\/attendance\/[a-f0-9-]+$/.test(source.pathname) || source.search || source.hash) throw new Error('Tệp SIS có nguồn ngoài cổng UMT.');
+    if (source.origin !== 'https://sis.umt.edu.vn' || !/^\/attendance\/[a-f0-9-]+$/.test(source.pathname) || source.search || source.hash || source.username || source.password) throw new Error('Tệp SIS có nguồn ngoài cổng UMT.');
+    if (catalog.courses.some(c => c.code === course.code || c.source === source.href)) throw new Error('Tệp SIS có môn học trùng.');
+    catalog.courses.push({ name: clean(course.name, 200), code: course.code, source: source.href });
     for (const row of course.rows) {
       if (!row || typeof row !== 'object' || (row.cancelled !== undefined && typeof row.cancelled !== 'boolean')) throw new Error('Lịch SIS có buổi học chưa đúng định dạng.');
       if (row.cancelled === true) { cancelled++; continue; }
@@ -37,5 +40,5 @@ export function parseSisSchedule(input: unknown): Omit<ImportPreview, 'id'> {
       if (items.length > 2000) throw new Error('Lịch SIS vượt giới hạn 2.000 buổi học.');
     }
   }
-  return { items: [...new Map(items.map(item => [item.id, item])).values()], group, label: `Thời khóa biểu SIS · ${data.term}`, warnings: [`Nguồn: bảng buổi học SIS. Giờ Việt Nam (UTC+7). ${cancelled ? `Bỏ qua ${cancelled} buổi đã hủy. ` : ''}Đây là bản nhập, cần nhập lại khi SIS đổi lịch; không tự đồng bộ.`] };
+  return { items: [...new Map(items.map(item => [item.id, item])).values()], group, sisCatalog: catalog, label: `Thời khóa biểu SIS · ${data.term}`, warnings: [`Nguồn: bảng buổi học SIS. Giờ Việt Nam (UTC+7). ${cancelled ? `Bỏ qua ${cancelled} buổi đã hủy. ` : ''}Đây là bản nhập, cần nhập lại khi SIS đổi lịch hoặc bật cầu nối Chrome.`] };
 }
