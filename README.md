@@ -24,6 +24,8 @@ The UI uses locally bundled Nunito with Vietnamese support for a softer, more re
 
 The overview has interactive stacked bars for the next seven days, a completion ring, assignment/quiz counters and separate upcoming deadlines/classes. Calendar search supports subject, deadline/class filtering and month/list views; graph clicks open the selected calendar day. Counts come from saved items, with classes and informational content excluded from work-completion totals. Manual entries can be tasks, assignments, quizzes or dated class events. The direct Outlook card remains visible as **Sắp có**, without an active setup/connect button; the working Gmail bridge is unchanged.
 
+Canvas iCal `URL;VALUE=URI` values are unwrapped before classification. Calendar URLs paired with `event-assignment-*` UIDs remain deadlines. When the same Canvas assignment is already available through the API, the native record supplies its exact time, quiz type and completion state; the imported snapshot does not duplicate it.
+
 Canvas sync preserves successful partitions when one endpoint fails. If course-file listing returns 403/404, the connector separately collects file links from readable, unlocked modules; it does not download file content or bypass Canvas access checks. Quiz 404 warnings explain that assignment-based quiz data is retained without claiming every quiz is present.
 
 ### Use without a Microsoft app registration

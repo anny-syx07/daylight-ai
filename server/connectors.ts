@@ -74,7 +74,8 @@ export async function allItems(): Promise<Item[]> {
     const upstream = (await Promise.all(partitions.map(partition => get<Item[]>(`items:${partition}`, [])))).flat();
     const imports = await get<Item[]>('imported', []);
     const liveUrls = new Set(upstream.filter(item => item.url && item.due).map(item => `${item.url}|${item.due}`));
-    return [...new Map(upstream.map(item => [item.id, item])).values(), ...imports.filter(item => !item.url || !item.due || !liveUrls.has(`${item.url}|${item.due}`))];
+    const canvasAssignments = new Set(upstream.map(item => item.id.match(/^canvas:assignment:\d+:(\d+)$/)?.[1]).filter(Boolean).map(Number));
+    return [...new Map(upstream.map(item => [item.id, item])).values(), ...imports.filter(item => !(item.canvasAssignmentId && canvasAssignments.has(item.canvasAssignmentId)) && (!item.url || !item.due || !liveUrls.has(`${item.url}|${item.due}`)))];
 }
 async function savePartition(source: Source, partition: string, items: Item[]) {
     await replacePartition(source, partition, items);

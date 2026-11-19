@@ -10,7 +10,7 @@ const directory = mkdtempSync(join(tmpdir(), 'daylight-import-'));
 process.env.DATA_DIR = directory;
 delete process.env.DATABASE_URL;
 const { parseImport, previewImport, commitImport, gmailSetup, gmailAuthorized, receiveGmail, importStatus } = await import('../server/imports.js');
-const { get, db } = await import('../server/store.js');
+const { get, set, db } = await import('../server/store.js');
 after(() => { db?.close(); rmSync(directory, { recursive: true, force: true }); });
 const encoded = (text: string) => Buffer.from(text).toString('base64');
 const now = Date.parse('2026-11-19T00:00:00Z');
@@ -45,6 +45,23 @@ test('EML decodes MIME without retaining attachments or guessing deadlines', asy
   assert.equal(result.items[0].due, null);
   assert.match(result.items[0].detail!, /Hẹn nộp/);
   assert.ok(!JSON.stringify(result).includes('ATTACHMENT-MUST-NOT-PERSIST'));
+});
+test('Canvas ICS parameterized calendar URLs and assignment UIDs stay deadlines, not class events', async () => {
+  const input = calendar(event().replace('UID:deadline-test', 'UID:event-assignment-34').replace('URL:https://umthcm.instructure.com/courses/12/assignments/34', 'URL;VALUE=URI:https://umthcm.instructure.com/calendar?include_contexts=course_12&month=11&year=2026'));
+  const parsed = await parseImport('canvas.ics', encoded(input), now);
+  assert.equal(parsed.items[0].kind, 'assignment');
+  assert.equal(parsed.items[0].canvasAssignmentId, 34);
+  assert.equal(new URL(parsed.items[0].url!).pathname, '/calendar');
+  await set('partitions', ['canvas:12:assignment']);
+  await set('items:canvas:12:assignment', [{ ...parsed.items[0], id: 'canvas:assignment:12:34', source: 'canvas', kind: 'quiz', completed: true, allDay: false, due: '2026-11-20T16:59:00.000Z' }]);
+  await set('imported', parsed.items);
+  const { allItems } = await import('../server/connectors.js');
+  const merged = await allItems();
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].source, 'canvas');
+  assert.equal(merged[0].kind, 'quiz');
+  assert.equal(merged[0].completed, true);
+  await set('partitions', []); await set('imported', []);
 });
 
 test('import requires confirm; same calendar filename replaces snapshot and preserves stable ids', async () => {
