@@ -2,9 +2,11 @@ import express from 'express';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import { resolve } from 'node:path';
 import { existsSync } from 'node:fs';
+import { setTimeout as delay } from 'node:timers/promises';
+import { waitUntil } from '@vercel/functions';
 import { get, set, remove, seal, update } from './store.js';
 import { allItems, syncAll, isSyncing, validateCanvas, normalizeCanvasToken, ProviderError, disconnect, msal, cryptoProvider, microsoftReady, scopes, origin, publicError } from './connectors.js';
-import { defaultSettings, pushKey, sendReminders } from './reminders.js';
+import { defaultSettings, pushKey, sendReminders, runReminderClock, prepareTestPush } from './reminders.js';
 import type { Item, Connection } from '../src/types.js';
 import { previewImport, commitImport, importStatus, gmailAuthorized, receiveGmail, gmailSetup } from './imports.js';
 import { sisAuthorized, sisSetup, receiveSis, revokeSis } from './sis-bridge.js';
@@ -24,7 +26,7 @@ app.use((request, response, next) => {
         response.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     if (request.path.startsWith('/api'))
         response.set('Cache-Control', 'no-store');
-    if (request.path.startsWith('/api') && !['GET', 'HEAD'].includes(request.method) && request.headers.origin !== origin && !(request.method === 'POST' && ['/api/imports/gmail/receive', '/api/imports/sis/receive'].includes(request.path))) {
+    if (request.path.startsWith('/api') && !['GET', 'HEAD'].includes(request.method) && request.headers.origin !== origin && !(request.method === 'POST' && ['/api/imports/gmail/receive', '/api/imports/sis/receive', '/api/reminders/tick'].includes(request.path))) {
         response.status(403).json({ error: 'Nguồn yêu cầu không hợp lệ.' });
         return;
     }
@@ -57,8 +59,12 @@ app.post('/api/imports/gmail/receive', async (request, response) => {
 });
 app.post('/api/imports/sis/receive', async (request, response) => {
     if (!await sisAuthorized(request.headers.authorization)) { response.sendStatus(401); return; }
-    try { response.json(await receiveSis(request.body)); }
+    try { const result = await receiveSis(request.body); if (!request.body.error) await sendReminders().catch(() => {}); response.json(result); }
     catch { response.status(400).json({ error: 'Chưa đọc đủ lịch SIS hoặc phiên kiểm tra đã cũ. Lịch đang lưu được giữ nguyên.' }); }
+});
+app.post('/api/reminders/tick', async (request, response) => {
+    if (!await gmailAuthorized(request.headers.authorization)) { response.sendStatus(401); return; }
+    response.json(await runReminderClock());
 });
 app.post('/api/login', async (request, response) => {
     const bucket = await update('login-attempts', { count: 0, reset: 0 }, previous => previous.reset < Date.now() ? { count: 1, reset: Date.now() + 900000 } : { ...previous, count: previous.count + 1 });
@@ -85,14 +91,14 @@ app.get('/api/dashboard', async (_request, response) => {
     const raw = [...await allItems(), ...await get<Item[]>('manual', [])];
     const assignments = new Set(raw.filter(item => item.kind === 'assignment' && item.url).map(item => item.url));
     const items = raw.filter(item => !(['quiz', 'discussion'].includes(item.kind) && item.url && assignments.has(item.url))).map(item => ({ ...item, completed: item.completed || completed[item.id] || false }));
-    response.json({ items, connections: { canvas: { ...await get<Connection>('connection:canvas', { connected: false }), diagnostic: await get('canvas:last-check', null) }, outlook: await get<Connection>('connection:outlook', { connected: false }) }, imports: await importStatus(), settings: await get('settings', defaultSettings), pushKey, microsoftReady, passwordRequired: Boolean(password), serverless });
+    response.json({ items, connections: { canvas: { ...await get<Connection>('connection:canvas', { connected: false }), diagnostic: await get('canvas:last-check', null) }, outlook: await get<Connection>('connection:outlook', { connected: false }) }, imports: await importStatus(), settings: await get('settings', defaultSettings), reminderClock: await get('reminder:clock', null), pushKey, microsoftReady, passwordRequired: Boolean(password), serverless });
 });
 app.post('/api/imports/preview', async (request, response) => {
     try { response.json(await previewImport(request.body.filename, request.body.content)); }
     catch (error) { response.status(400).json({ error: error instanceof Error && /^(Chọn|Tệp|Email|Chỉ|Mỗi|Múi|Lịch)/.test(error.message) ? error.message : 'Chưa đọc được tệp. Hãy xuất lại lịch hoặc email và thử lại.' }); }
 });
 app.post('/api/imports/confirm', async (request, response) => {
-    try { response.json(await commitImport(request.body.id)); }
+    try { const result = await commitImport(request.body.id); await sendReminders().catch(() => {}); response.json(result); }
     catch (error) { response.status(400).json({ error: error instanceof Error && /^(Bản xem trước|Góc nhập)/.test(error.message) ? error.message : 'Chưa lưu được dữ liệu. Hãy thử lại.' }); }
 });
 app.delete('/api/imports/items/:id', async (request, response) => {
@@ -143,6 +149,15 @@ app.delete('/api/connect/:source', async (request, response) => { if (isSyncing(
 } await disconnect(request.params.source as 'canvas' | 'outlook'); response.json({ ok: true }); });
 app.post('/api/sync', async (_request, response) => { await syncAll(); await sendReminders(); response.json({ ok: true }); });
 app.post('/api/reminders/check', async (_request, response) => { await sendReminders(); response.json({ ok: true }); });
+app.post('/api/push/test', async (request, response) => {
+    try {
+        const send = await prepareTestPush(request.body.endpoint);
+        const work = delay(15000).then(send).then(async () => { await set('push:last-test', { sentAt: new Date().toISOString(), accepted: true }); }).catch(async () => { await set('push:last-test', { sentAt: new Date().toISOString(), accepted: false }); });
+        waitUntil(work);
+        response.status(202).json({ queued: true, delaySeconds: 15 });
+    }
+    catch { response.status(400).json({ error: 'Chưa gửi được thông báo thử. Bật thông báo trên thiết bị này, hoặc đợi 30 giây rồi thử lại.' }); }
+});
 app.get('/api/connect/outlook', async (request, response) => {
     if (!microsoftReady) {
         response.redirect('/?outlook=setup');
@@ -192,6 +207,7 @@ app.post('/api/tasks', async (request, response) => {
     }
     const item: Item = { id: `manual:${randomBytes(12).toString('hex')}`, source: 'manual', kind, title: title.trim(), due: due ? new Date(due).toISOString() : null, course: typeof course === 'string' ? course.slice(0, 100) : 'Cá nhân' };
     await update<Item[]>('manual', [], items => [...items, item]);
+    await sendReminders().catch(() => {});
     response.json(item);
 });
 app.patch('/api/items/:id', async (request, response) => {

@@ -60,11 +60,16 @@ test('private API requires session and exact Origin; task changes persist and lo
     assert.equal((await fetch(`${origin}/api/tasks`, { method: 'POST', headers, body: JSON.stringify({ title: 'Wrong kind', kind: 'grade' }) })).status, 400);
     await fetch(`${origin}/api/tasks/${encodeURIComponent(lesson.id)}`, { method: 'DELETE', headers });
     assert.equal((await fetch(`${origin}/api/imports/gmail/receive`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: [] }) })).status, 401);
+    assert.equal((await fetch(`${origin}/api/reminders/tick`, { method:'POST',headers:{'Content-Type':'application/json'},body:'{}' })).status,401);
+    assert.equal((await fetch(`${origin}/api/push/test`,{method:'POST',headers:{'Content-Type':'application/json',Origin:origin},body:'{}'})).status,401);
+    assert.equal((await fetch(`${origin}/api/push/test`,{method:'POST',headers,body:JSON.stringify({endpoint:'https://evil.example'})})).status,400);
     assert.equal((await fetch(`${origin}/api/imports/gmail/setup`, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin }, body: '{}' })).status, 401);
     assert.equal((await fetch(`${origin}/api/imports/gmail/setup`, { method: 'POST', headers: { ...headers, Origin: 'https://evil.example' }, body: '{}' })).status, 403);
     const setup = await (await fetch(`${origin}/api/imports/gmail/setup`, { method: 'POST', headers, body: '{}' })).json();
     const config = JSON.parse(setup.code.match(/const DAYLIGHT = (.+);/)[1]);
     const inboundHeaders = { 'Content-Type': 'application/json', Authorization: `Bearer ${config.key}` };
+    const tick=await fetch(`${origin}/api/reminders/tick`,{method:'POST',headers:inboundHeaders,body:'{}'});
+    assert.equal(tick.status,200);const nextTick=await tick.json();assert.equal(typeof nextTick.nextCheckAt,'number');assert.deepEqual(Object.keys(nextTick),['nextCheckAt']);
     const receive = () => fetch(`${origin}/api/imports/gmail/receive`, { method: 'POST', headers: inboundHeaders, body: JSON.stringify({ messages: [{ id: 'abcd1234', subject: 'Test notice', from: 'Teacher', snippet: 'Tomorrow' }] }) });
     assert.equal((await receive()).status, 200);
     assert.equal((await receive()).status, 200);
@@ -77,6 +82,7 @@ test('private API requires session and exact Origin; task changes persist and lo
     assert.ok(!JSON.stringify(imported).includes(config.key));
     await fetch(`${origin}/api/imports/gmail/setup`, { method: 'DELETE', headers });
     assert.equal((await receive()).status, 401);
+    assert.equal((await fetch(`${origin}/api/reminders/tick`,{method:'POST',headers:inboundHeaders,body:'{}'})).status,401);
     assert.equal((await fetch(`${origin}/api/imports/sis/receive`, { method:'POST',headers:{'Content-Type':'application/json'},body:'{}' })).status,401);
     assert.equal((await fetch(`${origin}/api/imports/sis/setup`, { method:'POST',headers:{'Content-Type':'application/json',Origin:origin},body:'{}' })).status,401);
     assert.equal((await fetch(`${origin}/api/imports/sis/setup`, { method:'POST',headers:{...headers,Origin:'https://evil.example'},body:'{}' })).status,403);

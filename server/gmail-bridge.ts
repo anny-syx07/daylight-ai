@@ -6,11 +6,46 @@ function setupDaylight() {
   syncDaylight();
   stopDaylight();
   ScriptApp.newTrigger('syncDaylight').timeBased().everyMinutes(10).create();
+  setupDaylightReminders();
   console.log('Đã cài xong. Quay lại Daylight để xem trạng thái.');
 }
 
 function stopDaylight() {
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'syncDaylight').forEach(t => ScriptApp.deleteTrigger(t));
+}
+
+// Google wakes this every minute. Between reminders it sleeps locally until
+// the server's next wake-up time (at most 10 minutes), keeping free quotas low.
+function setupDaylightReminders() {
+  stopDaylightReminders();
+  ScriptApp.newTrigger('tickDaylightReminders').timeBased().everyMinutes(1).create();
+  PropertiesService.getScriptProperties().deleteProperty('reminders:next-check');
+  tickDaylightReminders();
+  console.log('Đã bật nhắc nền. Dùng nút Thử thông báo trên từng điện thoại.');
+}
+
+function stopDaylightReminders() {
+  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'tickDaylightReminders').forEach(t => ScriptApp.deleteTrigger(t));
+  PropertiesService.getScriptProperties().deleteProperty('reminders:next-check');
+}
+
+function tickDaylightReminders() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) return;
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const now = Date.now();
+    if (Number(props.getProperty('reminders:next-check') || 0) > now) return;
+    const response = UrlFetchApp.fetch(DAYLIGHT.endpoint.replace('/api/imports/gmail/receive', '/api/reminders/tick'), {
+      method: 'post', contentType: 'application/json', headers: { Authorization: 'Bearer ' + DAYLIGHT.key },
+      payload: '{}', muteHttpExceptions: true, followRedirects: false
+    });
+    if (response.getResponseCode() !== 200) throw new Error('Chưa kiểm tra nhắc nền được (HTTP ' + response.getResponseCode() + ').');
+    const result = JSON.parse(response.getContentText());
+    const next = Number(result.nextCheckAt);
+    if (!Number.isFinite(next)) throw new Error('Chưa nhận được giờ kiểm tra tiếp theo.');
+    props.setProperty('reminders:next-check', String(Math.min(Date.now() + 600000, Math.max(Date.now(), next))));
+  } finally { lock.releaseLock(); }
 }
 
 function syncDaylight() {
