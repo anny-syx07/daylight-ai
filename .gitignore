@@ -1,4 +1,9 @@
 # Logs
+.data/
+node_modules.offloaded/
+*.offloaded
+node_modules.offloaded/
+.test-data/
 logs
 *.log
 npm-debug.log*
@@ -39,6 +44,7 @@ build/Release
 
 # Dependency directories
 node_modules/
+node_modules
 jspm_packages/
 
 # Snowpack dependency directory (https://snowpack.dev/)
