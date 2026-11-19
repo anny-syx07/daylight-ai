@@ -2,7 +2,7 @@
 
 > A free beta study PWA for students whose schools use Canvas LMS. Each user creates a separate account and connects their own sources.
 
-Daylight combines assignments, quizzes, deadlines, class schedules, messages and Web Push reminders. Dashboard charts reflect saved source data. This release does not include generative AI despite the repository's Daylight AI name.
+Daylight is a study notification maker (noti maker): Canvas assignments, quizzes and announcements; Outlook school messages forwarded through a Gmail bridge; imported SIS UMT class schedules; deadline reminders and Web Push. Direct Outlook OAuth is currently unavailable. Dashboard charts reflect saved source data. This release does not include generative AI despite the repository's Daylight AI name.
 
 - [Home](https://daylight-ai-three.vercel.app/): public introduction
 - [Start](https://daylight-ai-three.vercel.app/app?signup): email account registration and verification

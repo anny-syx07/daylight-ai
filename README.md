@@ -1,6 +1,6 @@
 # Daylight AI ☀️
 
-A calm personal study PWA: Canvas LMS, Gmail bridge, deadlines and reminders.
+A calm study notification maker: Canvas LMS, school Outlook through a Gmail bridge, SIS UMT class schedules, deadlines and mobile reminders.
 
 [**☀️ Mở Daylight AI online**](https://daylight-ai-three.vercel.app) · Vercel Hobby + Neon Free.
 

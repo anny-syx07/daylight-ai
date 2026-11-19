@@ -9,7 +9,7 @@ try{
   const {PublicPage}=await vite.ssrLoadModule('/src/PublicPages.tsx');
   const {ConnectionHelpPage}=await vite.ssrLoadModule('/src/ConnectionHelp.tsx');
   const pages=[
-    {path:'/',title:'Daylight · Deadline Canvas, lịch học và nhắc việc sinh viên',description:'Gom deadline Canvas của trường, lịch học và email vào một góc học tập riêng. Bản dùng thử miễn phí, hỗ trợ nhắc nền trên iPhone và Android.',element:<PublicPage/>},
+    {path:'/',title:'Daylight · Noti maker cho Canvas, Outlook & SIS',description:'Daylight tạo noti từ Canvas, thư Outlook qua Gmail và lịch SIS UMT. Gom deadline, buổi học, tin mới; hỗ trợ nhắc nền trên iPhone và Android.',element:<PublicPage/>},
     {path:'/huong-dan',title:'Hướng dẫn kết nối Canvas, Gmail và cài Daylight',description:'Nhập địa chỉ Canvas của trường, tạo token, kết nối Gmail và cài nhắc nền trên iPhone, Android. Làm từng bước cùng Daylight.',element:<ConnectionHelpPage/>},
     {path:'/quyen-rieng-tu',title:'Quyền riêng tư · Daylight',description:'Dữ liệu Daylight lưu, cách tách tài khoản, mã hóa token, cầu nối email và cách kiểm soát dữ liệu học tập của bạn.',element:<PublicPage legal="privacy"/>},
     {path:'/dieu-khoan',title:'Điều khoản sử dụng · Daylight',description:'Phạm vi bản dùng thử Daylight, quyền kết nối nguồn học tập và giới hạn đồng bộ, nhắc việc trên điện thoại.',element:<PublicPage legal="terms"/>},
