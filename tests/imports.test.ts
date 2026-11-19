@@ -61,6 +61,13 @@ test('Canvas ICS parameterized calendar URLs and assignment UIDs stay deadlines,
   assert.equal(merged[0].source, 'canvas');
   assert.equal(merged[0].kind, 'quiz');
   assert.equal(merged[0].completed, true);
+  await set('items:canvas:12:assignment', [{ ...merged[0], due: null, allDay: false }]);
+  await set('imported', [{ ...parsed.items[0], allDay: true, due: '2026-11-25T12:00:00.000Z' }]);
+  const fallback = await allItems();
+  assert.equal(fallback.length, 1);
+  assert.equal(fallback[0].due, '2026-11-25T12:00:00.000Z');
+  assert.equal(fallback[0].allDay, true);
+  assert.match(fallback[0].importLabel!, /lịch .ics/);
   await set('partitions', []); await set('imported', []);
 });
 

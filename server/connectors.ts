@@ -71,8 +71,14 @@ const text = (value: unknown) => String(value || '').replace(/<[^>]*>/g, ' ').re
 async function replacePartition(source: Source, partition: string, items: Item[]) { await set(`items:${source}:${partition}`, items); }
 export async function allItems(): Promise<Item[]> {
     const partitions = await get<string[]>('partitions', []);
-    const upstream = (await Promise.all(partitions.map(partition => get<Item[]>(`items:${partition}`, [])))).flat();
+    const raw = (await Promise.all(partitions.map(partition => get<Item[]>(`items:${partition}`, [])))).flat();
     const imports = await get<Item[]>('imported', []);
+    const importedAssignments = new Map(imports.filter(item => item.canvasAssignmentId).map(item => [item.canvasAssignmentId, item]));
+    const upstream = raw.map(item => {
+        const id = Number(item.id.match(/^canvas:assignment:\d+:(\d+)$/)?.[1]);
+        const fallback = importedAssignments.get(id);
+        return !item.due && fallback?.due ? { ...item, due: fallback.due, allDay: fallback.allDay, importLabel: 'Ngày hạn từ lịch .ics đã nhập' } : item;
+    });
     const liveUrls = new Set(upstream.filter(item => item.url && item.due).map(item => `${item.url}|${item.due}`));
     const canvasAssignments = new Set(upstream.map(item => item.id.match(/^canvas:assignment:\d+:(\d+)$/)?.[1]).filter(Boolean).map(Number));
     return [...new Map(upstream.map(item => [item.id, item])).values(), ...imports.filter(item => !(item.canvasAssignmentId && canvasAssignments.has(item.canvasAssignmentId)) && (!item.url || !item.due || !liveUrls.has(`${item.url}|${item.due}`)))];
