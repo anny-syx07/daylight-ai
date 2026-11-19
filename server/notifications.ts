@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import webpush from 'web-push';
+import { ownsDevice } from './push-devices.js';
 import { get, update, claim, release } from './store.js';
 import { allItems } from './connectors.js';
 import type { Item } from '../src/types.js';
@@ -46,6 +47,7 @@ export async function deliverNewMessages() {
     const expiredTargets=new Set<string>();
     for (const job of state.jobs.filter(j=>!j.done)) {
       for (const subscription of subscriptions) {
+        if(!await ownsDevice(subscription.endpoint))continue;
         const target=hash(subscription.endpoint);
         if(expiredTargets.has(target)) continue;
         const delivery=job.deliveries[target];

@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /app
+Disallow: /owner
+Sitemap: https://daylight-ai-three.vercel.app/sitemap.xml

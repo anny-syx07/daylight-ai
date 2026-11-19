@@ -4,14 +4,16 @@ import { resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
 import { waitUntil } from '@vercel/functions';
-import { get, set, remove, seal, update } from './store.js';
+import { get, set, remove, seal, update, inWorkspace,eraseMemberData,workspaceId } from './store.js';
 import { allItems, syncAll, isSyncing, validateCanvas, normalizeCanvasToken, ProviderError, disconnect, msal, cryptoProvider, microsoftReady, scopes, origin, publicError } from './connectors.js';
 import { defaultSettings, pushKey, sendReminders, runReminderClock, prepareTestPush } from './reminders.js';
 import type { Item, Connection } from '../src/types.js';
-import { previewImport, commitImport, importStatus, gmailAuthorized, receiveGmail, gmailSetup } from './imports.js';
+import { previewImport, commitImport, importStatus, gmailAuthorized, receiveGmail, gmailSetup, revokeGmail } from './imports.js';
 import { sisAuthorized, sisSetup, receiveSis, revokeSis } from './sis-bridge.js';
 import { canvasAutomation, maybeAutoSyncCanvas } from './auto-sync.js';
 import { collectNewMessages, deliverNewMessages, notificationStatus } from './notifications.js';
+import { bindDevice, unbindDevice,ownsDevice } from './push-devices.js';
+import { memberAuthReady, memberIdentity, memberAuthProxy, hasMemberCookie, clearMemberCookies, revokeMemberSession, bridgeWorkspace } from './member-auth.js';
 const production = process.env.NODE_ENV === 'production';
 const serverless = Boolean(process.env.VERCEL);
 const password = process.env.APP_PASSWORD;
@@ -19,6 +21,7 @@ if (production && (!password || password.length < 16 || !origin.startsWith('http
     throw new Error('Production requires APP_PASSWORD (16+ characters) and HTTPS APP_ORIGIN.');
 const app = express();
 app.disable('x-powered-by');
+app.use('/api/auth',express.raw({type:'*/*',limit:'32kb'}));
 app.use('/api/imports/preview', express.json({ limit: '1500kb' }));
 app.use('/api/imports/sis/receive', express.json({ limit: '1mb' }));
 app.use(express.json({ limit: '32kb' }));
@@ -45,6 +48,22 @@ async function authorized(request: express.Request) {
     } | null>(`session:${digest(sessionId(request)).toString('hex')}`, null);
     return Boolean(value && value.expires > Date.now());
 }
+async function identity(request:express.Request,response:express.Response) {
+    if(hasMemberCookie(request)) return memberIdentity(request,response);
+    if(await inWorkspace('owner',()=>authorized(request))) return {workspace:'owner',name:'Góc nhỏ của bạn',kind:'owner' as const};
+    return null;
+}
+app.all('/api/auth/{*path}', async(request,response)=>{
+    if(request.method==='POST' && /\/(sign-in\/email|sign-up\/email|sign-out)$/.test(request.path)) {
+        await inWorkspace('owner',()=>remove(`session:${digest(sessionId(request)).toString('hex')}`));
+        response.clearCookie(cookieName,{path:'/',secure:production,httpOnly:true,sameSite:'lax'});
+    }
+    try{await memberAuthProxy(request,response);}catch{response.status(503).json({error:'Chưa kết nối được dịch vụ đăng nhập. Hãy thử lại.'});}
+});
+app.use(['/api/imports/gmail/receive','/api/reminders/tick','/api/imports/sis/receive'],async(request,_response,next)=>{
+    const workspace=await bridgeWorkspace(request.originalUrl.includes('/sis/')?'sis':'gmail',request.headers.authorization);
+    inWorkspace(workspace,()=>next());
+});
 app.get('/api/health', (_request, response) => response.json({ ok: true }));
 app.get('/api/cron', async (request, response) => {
     const expected = process.env.CRON_SECRET;
@@ -56,7 +75,7 @@ app.get('/api/cron', async (request, response) => {
     await sendReminders();
     response.json({ ok: true });
 });
-app.get('/api/session', async (request, response) => response.json({ authenticated: await authorized(request), passwordRequired: Boolean(password) }));
+app.get('/api/session', async (request, response) => { try { const user=await identity(request,response);response.json({authenticated:Boolean(user),passwordRequired:Boolean(password),memberAuthReady,user:user?{name:user.name,kind:user.kind}:null}); }catch{response.status(503).json({error:'Chưa kiểm tra được phiên đăng nhập.'});} });
 app.post('/api/imports/gmail/receive', async (request, response) => {
     if (!await gmailAuthorized(request.headers.authorization)) { response.sendStatus(401); return; }
     try { await collectNewMessages(); const result = await receiveGmail(request.body); await collectNewMessages(); waitUntil(deliverNewMessages().catch(() => {})); response.json(result); }
@@ -86,15 +105,16 @@ app.post('/api/login', async (request, response) => {
         return;
     }
     await remove('login-attempts');
+    await revokeMemberSession(request);clearMemberCookies(request,response);
     const session = randomBytes(32).toString('hex');
     await set(`session:${digest(session).toString('hex')}`, { expires: Date.now() + 7 * 86400000 });
     response.cookie(cookieName, session, { httpOnly: true, secure: production, sameSite: 'lax', path: '/', maxAge: 7 * 86400000 }).json({ ok: true });
 });
-app.use('/api', async (request, response, next) => { if (!await authorized(request)) {
+app.use('/api', async (request, response, next) => { let user;try{user=await identity(request,response);}catch{response.status(503).json({error:'Chưa kiểm tra được phiên đăng nhập.'});return;} if (!user) {
     response.status(401).json({ error: 'Hãy đăng nhập để tiếp tục.' });
     return;
-} next(); });
-app.post('/api/logout', async (request, response) => { await remove(`session:${digest(sessionId(request)).toString('hex')}`); response.clearCookie(cookieName, { path: '/', secure: production, httpOnly: true, sameSite: 'lax' }).json({ ok: true }); });
+} inWorkspace(user.workspace,()=>next()); });
+app.post('/api/logout', async (request, response) => { await unbindDevice(request.body?.endpoint);await inWorkspace('owner',()=>remove(`session:${digest(sessionId(request)).toString('hex')}`));await revokeMemberSession(request);clearMemberCookies(request,response); response.clearCookie(cookieName, { path: '/', secure: production, httpOnly: true, sameSite: 'lax' }).json({ ok: true }); });
 app.get('/api/dashboard', async (_request, response) => {
     const completed = await get<Record<string, boolean>>('completed', {});
     const raw = [...await allItems(), ...await get<Item[]>('manual', [])];
@@ -102,6 +122,8 @@ app.get('/api/dashboard', async (_request, response) => {
     const items = raw.filter(item => !(['quiz', 'discussion'].includes(item.kind) && item.url && assignments.has(item.url))).map(item => ({ ...item, completed: item.completed || completed[item.id] || false }));
     response.json({ items, connections: { canvas: { ...await get<Connection>('connection:canvas', { connected: false }), diagnostic: await get('canvas:last-check', null) }, outlook: await get<Connection>('connection:outlook', { connected: false }) }, imports: await importStatus(), automation: { canvas: await canvasAutomation() }, notifications: await notificationStatus(), settings: await get('settings', defaultSettings), reminderClock: await get('reminder:clock', null), pushKey, microsoftReady, passwordRequired: Boolean(password), serverless });
 });
+app.post('/api/push/status',async(request,response)=>response.json({registered:typeof request.body.endpoint==='string' && await ownsDevice(request.body.endpoint) && (await get<any[]>('subscriptions',[])).some(s=>s.endpoint===request.body.endpoint)}));
+app.delete('/api/workspace',async(request,response)=>{if(workspaceId()==='owner'||request.body.confirm!=='DELETE'){response.sendStatus(400);return;}if(isSyncing()){response.status(409).json({error:'Đợi lần đồng bộ đang chạy hoàn tất rồi xóa nhé.'});return;}try{await revokeGmail();await revokeSis();await eraseMemberData();response.json({ok:true});}catch{response.status(400).json({error:'Chưa xóa được. Hãy thử lại.'});}});
 app.patch('/api/automation/canvas', async (request, response) => {
     if (typeof request.body.enabled !== 'boolean') { response.sendStatus(400); return; }
     await set('automation:canvas-enabled', request.body.enabled);
@@ -130,7 +152,7 @@ app.post('/api/imports/sis/setup', async (_request, response) => {
 app.delete('/api/imports/sis/setup', async (_request, response) => { await revokeSis(); response.json({ ok: true }); });
 app.post('/api/imports/gmail/setup', async (_request, response) => response.json(await gmailSetup(origin, true)));
 app.delete('/api/imports/gmail/setup', async (_request, response) => {
-    await remove('gmail:secret'); await remove('gmail:status');
+    await revokeGmail();
     response.json({ ok: true });
 });
 app.post('/api/connect/canvas', async (request, response) => {
@@ -271,7 +293,7 @@ app.post('/api/push', async (request, response) => {
         response.status(400).json({ error: 'Dịch vụ thông báo của trình duyệt chưa được hỗ trợ.' });
         return;
     }
-    await update<any[]>('subscriptions', [], values => [...values.filter(value => value.endpoint !== subscription.endpoint), { endpoint: subscription.endpoint, keys: { p256dh: subscription.keys.p256dh, auth: subscription.keys.auth } }]);
+    await bindDevice({ endpoint: subscription.endpoint, keys: { p256dh: subscription.keys.p256dh, auth: subscription.keys.auth } });
     response.json({ ok: true });
 });
 app.use(express.static(resolve('dist'), { index: false }));

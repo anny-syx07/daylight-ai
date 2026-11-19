@@ -1,9 +1,10 @@
 import ical from 'node-ical';
 import PostalMime from 'postal-mime';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { get, set, secret, seal, remove, update } from './store.js';
+import { get, set, secret, seal, remove, update, workspaceId } from './store.js';
+import { registerBridge, unregisterBridge } from './member-auth.js';
 import type { Item, ImportPreview, ImportStatus } from '../src/types.js';
-import { bridgeCode } from './gmail-bridge.js';
+import { bridgeCode,reminderClockCode } from './gmail-bridge.js';
 import { parseSisSchedule } from './sis-import.js';
 
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -120,6 +121,8 @@ export async function gmailSetup(appOrigin: string, create = false) {
   let key = await secret('gmail:secret');
   if (!key && create) { key = randomBytes(32).toString('hex'); await set('gmail:secret', seal(key)); }
   if (!key) return null;
+  await registerBridge('gmail',key,workspaceId());
   const code = bridgeCode({ endpoint: `${appOrigin}/api/imports/gmail/receive`, key });
-  return { code, manifest: gmailManifest };
+  return { code, manifest: gmailManifest,clockCode:reminderClockCode({endpoint:`${appOrigin}/api/imports/gmail/receive`,key}),clockManifest:JSON.stringify({timeZone:'Asia/Ho_Chi_Minh',exceptionLogging:'NONE',runtimeVersion:'V8',oauthScopes:['https://www.googleapis.com/auth/script.external_request','https://www.googleapis.com/auth/script.scriptapp']},null,2) };
 }
+export async function revokeGmail() { const key=await secret('gmail:secret');if(key)await unregisterBridge('gmail',key);await remove('gmail:secret');await remove('gmail:status'); }

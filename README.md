@@ -1,12 +1,12 @@
 # Daylight AI ☀️
 
-A calm personal study PWA: Canvas LMS, school Outlook, deadlines and reminders.
+A calm personal study PWA: Canvas LMS, Gmail bridge, deadlines and reminders.
 
 [**☀️ Mở Daylight AI online**](https://daylight-ai-three.vercel.app) · Vercel Hobby + Neon Free.
 
 [**📖 Hướng dẫn Canvas & Outlook từng bước**](https://daylight-ai-three.vercel.app/huong-dan) · [Canvas](https://daylight-ai-three.vercel.app/huong-dan#canvas) · [Outlook](https://daylight-ai-three.vercel.app/huong-dan#outlook).
 
-The live app is reachable online; the study workspace is protected by its owner's Daylight password. This MVP currently has **one shared owner workspace**, not separate accounts for visitors. Do not give visitors the owner's password to set up their own Canvas or Outlook: they would share the same data. Independent user accounts are not enabled yet.
+Daylight is a **free public beta for UMT students**. Visitors can [create a verified email account](https://daylight-ai-three.vercel.app/app?signup) and connect their own Canvas UMT/Gmail sources in an isolated workspace. The original owner's workspace remains at `/owner` with its existing password; it is never merged into a visitor account. Direct Outlook is unavailable. This release has no generative AI feature.
 
 Canvas and Outlook instructions include direct new-tab links, a copyable Microsoft redirect URI, and school IT troubleshooting. The same help is linked from sign-in, connection cards and the Canvas token dialog.
 
@@ -34,7 +34,7 @@ The server does not claim that push-provider acceptance proves a banner appeared
 
 ### Mobile reminders with sound
 
-The shared owner workspace supports responsive iPhone and Android layouts; each phone registers its own Web Push subscription. iPhone requires iOS 16.4+ and a Home Screen installation. In Settings, enable notifications, then choose **Thử sau 15 giây** and close the app/lock the phone. The test runs on the server via Vercel `waitUntil`; the app does not claim delivery or sound until the owner confirms hearing it on that device. Push explicitly requests `silent: false`, Android vibration/re-notification and high delivery urgency. Sound remains subject to OS permissions, volume, Focus/Do Not Disturb and network availability; this is not a critical-alert entitlement or a delivery guarantee.
+Each workspace supports responsive iPhone and Android layouts; each phone registers its own Web Push subscription. iPhone requires iOS 16.4+ and a Home Screen installation. In Settings, enable notifications, then choose **Thử sau 15 giây** and close the app/lock the phone. The test runs on the server via Vercel `waitUntil`; the app does not claim delivery or sound until the owner confirms hearing it on that device. Push explicitly requests `silent: false`, Android vibration/re-notification and high delivery urgency. Sound remains subject to OS permissions, volume, Focus/Do Not Disturb and network availability; this is not a critical-alert entitlement or a delivery guarantee.
 
 The existing private Google Apps Script bridge can run **setupDaylightReminders** to add a one-minute cloud trigger using its existing external-request/trigger permissions. No laptop or open phone app is required. The trigger calls a dedicated Bearer-protected reminder endpoint with its existing revocable bridge key; it cannot read the dashboard, subjects or push credentials. The server returns only the next wake-up timestamp, up to ten minutes away, and selects earlier known 24h/1h boundaries. Google wakes around those boundaries once per minute; newly changed schedules are refreshed within ten minutes. Idle minutes do not query the database, reducing free-tier runtime/compute use. Transient push failures retry; expired subscriptions are removed; a shared lease plus per-device/per-window markers prevent routine duplicate sends. Quiet hours, completion, cancellation and snooze remain enforced. Free Google/Vercel/Neon quotas and scheduler delays still apply.
 
@@ -62,3 +62,17 @@ The owner can also preview and confirm `.ics` calendars or `.eml` messages (1 MB
 npm test
 npm run build
 ```
+
+### Public accounts
+
+`NEON_AUTH_BASE_URL` enables Managed Neon Auth (SDK 0.8.2) through a same-origin Express proxy. Registration requires email OTP verification; password reset uses OTP and revokes provider sessions. Only provider cookies are forwarded. The owner credential never travels to the auth provider. Unverified users cannot access app APIs. Configure the trusted origin, disable localhost in production, and keep ENCRYPTION_KEY stable.
+
+Each verified user ID maps to a SHA-256 workspace prefix. AsyncLocalStorage carries request/async source work, sync guards and leases are per workspace. Hashed receiving keys route Gmail/SIS callbacks. Provider tokens, imported data, completion, subscriptions, queues and settings are isolated. A push endpoint belongs to one workspace; explicit logout detaches it. Sign-in unsubscribes the browser's previous channel.
+
+The beta uses Neon's shared verification sender, which is rate limited and intended for testing. Configure a custom SMTP sender before a broad production launch. No paid sender was provisioned. Signup/reset are rate limited. The public landing, sitemap, robots and llms.txt describe actual scope; indexing or LLM recommendations are not guaranteed.
+
+Every new workspace must install its own Google clock for closed-app reminders/auto-refresh. Settings provides clock-only code requiring external-request/trigger permissions, without Gmail read access. The full Gmail bridge includes a clock too. A generated script is not an active heartbeat. The daily Vercel cron remains an owner fallback and does not scan all member workspaces.
+
+Members can erase their Daylight data in Settings, revoking bridges and clearing source tokens, imported items and settings. This preserves the login account and upstream data. Owner data is excluded.
+
+Run npm test for concurrent owner/two-member isolation, callback routing, cross-account mutation and logout checks. Verify real provider auth whenever changing its configuration.

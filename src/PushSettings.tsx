@@ -13,7 +13,7 @@ export function PushSettings({ clock, news, request, onEnable }: { clock: Dashbo
   const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
   const active = Boolean(clock?.lastCheck && Date.now() - Date.parse(clock.lastCheck) < 900000);
   useEffect(() => {
-    if (supported) void navigator.serviceWorker.ready.then(r => r.pushManager.getSubscription()).then(value => setRegistered(Boolean(value && Notification.permission === 'granted'))).catch(() => {});
+    if (supported) void navigator.serviceWorker.ready.then(r => r.pushManager.getSubscription()).then(async value => setRegistered(Boolean(value && Notification.permission === 'granted' && (await request('/push/status','POST',{endpoint:value.endpoint})).registered))).catch(() => {});
   }, [supported]);
   async function run(work: () => Promise<void>) {
     setBusy(true); setNotice('');

@@ -1,8 +1,9 @@
 import webpush from 'web-push';
-import { get, set, getOrCreate, update, claim, release } from './store.js';
+import { get, set, getOrCreate, update, claim, release, workspaceId } from './store.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { allItems } from './connectors.js';
 import type { Item } from '../src/types.js';
+import { ownsDevice } from './push-devices.js';
 export const defaultSettings = { reminders: false, quietStart: 22, quietEnd: 7, timezone: 'Asia/Ho_Chi_Minh' };
 const keys = await getOrCreate('vapid', webpush.generateVAPIDKeys());
 webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:admin@example.com', keys.publicKey, keys.privateKey);
@@ -19,14 +20,15 @@ export function reminderWindow(item: Item, now: number) {
     const remaining = Date.parse(item.due) - now;
     return remaining > 0 && remaining <= 3600000 ? '1h' : remaining > 3600000 && remaining <= 86400000 ? '24h' : null;
 }
-let sending = false;
+const sending = new Set<string>();
 export async function sendReminders() {
-    if (sending)
+    const workspace=workspaceId();
+    if (sending.has(workspace))
         return;
-    sending = true;
+    sending.add(workspace);
     const owner = randomUUID();
-    const acquired = await claim('lock:reminders', owner, 180000).catch(error => { sending = false; throw error; });
-    if (!acquired) { sending = false; return; }
+    const acquired = await claim('lock:reminders', owner, 180000).catch(error => { sending.delete(workspace); throw error; });
+    if (!acquired) { sending.delete(workspace); return; }
     let sent = 0; let failed = 0;
     try {
         const settings = await get('settings', defaultSettings);
@@ -41,6 +43,7 @@ export async function sendReminders() {
             if (!window || (snoozes[item.id] || 0) > Date.now())
                 continue;
             for (const subscription of subscriptions) {
+                if(!await ownsDevice(subscription.endpoint))continue;
                 const key = `sent:${subscription.endpoint}:${item.id}:${item.due}:${window}:${snoozes[item.id] || 0}`;
                 if (await get(key, false))
                     continue;
@@ -62,7 +65,7 @@ export async function sendReminders() {
     }
     finally {
         await release('lock:reminders', owner);
-        sending = false;
+        sending.delete(workspace);
     }
 }
 
@@ -97,11 +100,11 @@ export async function runReminderClock() {
 export async function prepareTestPush(endpoint: unknown) {
     if (typeof endpoint !== 'string') throw new Error('Thiết bị này chưa đăng ký nhận thông báo.');
     const subscription = (await get<webpush.PushSubscription[]>('subscriptions', [])).find(value => value.endpoint === endpoint);
-    if (!subscription) throw new Error('Bật thông báo trên thiết bị này trước nhé.');
+    if (!subscription || !await ownsDevice(subscription.endpoint)) throw new Error('Bật thông báo trên thiết bị này trước nhé.');
     const owner = randomUUID();
     if (!await claim(`push-test:${createEndpointKey(endpoint)}`, owner, 30000)) throw new Error('Chờ 30 giây trước khi thử lại nhé.');
     return async () => {
-        await webpush.sendNotification(subscription, JSON.stringify({ title: 'Daylight · thử tiếng chuông 🔔', body: 'Bạn có nghe âm thanh và thấy thông báo này không?', tag: `test:${owner}`, url: '/' }), { TTL: 120, urgency: 'high', timeout: 15000 });
+        if(await ownsDevice(subscription.endpoint)) await webpush.sendNotification(subscription, JSON.stringify({ title: 'Daylight · thử tiếng chuông 🔔', body: 'Bạn có nghe âm thanh và thấy thông báo này không?', tag: `test:${owner}`, url: '/app' }), { TTL: 120, urgency: 'high', timeout: 15000 });
         return { accepted: true };
     };
 }

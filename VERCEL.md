@@ -1,4 +1,4 @@
-# Free personal hosting: Vercel Hobby + Neon Free
+# Free beta hosting: Vercel Hobby + Neon Free
 
 Production: **https://daylight-ai-three.vercel.app**
 
@@ -14,8 +14,9 @@ In Vercel → Project → Settings → Environment Variables, configure **Produc
 
 - `DATABASE_URL`: your Neon Postgres connection string. Keep server-side.
 - `ENCRYPTION_KEY`: 64 hexadecimal characters, generated once. Keep persistent with the database; changing it makes existing credentials unreadable.
-- `APP_PASSWORD`: an app password of at least 16 characters. This single-owner app does not use your school password. Use Vercel's encrypted environment-variable type if you need to reveal it later in your own dashboard.
+- `APP_PASSWORD`: an app password of at least 16 characters. This preserves the original owner workspace at /owner. Members use Neon Auth, not the school password. Use Vercel's encrypted environment-variable type if you need to reveal it later in your own dashboard.
 - `APP_ORIGIN`: the exact production HTTPS URL without a trailing slash. If omitted, the API uses Vercel's `VERCEL_PROJECT_PRODUCTION_URL` when available. Use this same URL for browser access and Microsoft redirects.
+- `NEON_AUTH_BASE_URL`: Managed Neon Auth URL for the production branch. Enable verified email OTP signup, set the production trusted origin, and disable localhost.
 - `CRON_SECRET`: a random secret of at least 16 characters to protect `/api/cron`.
 - `VAPID_SUBJECT`: a `mailto:` contact for Web Push.
 
@@ -26,10 +27,10 @@ Use a dedicated empty database. The app creates its `daylight_kv` table automati
 ## What the free version does
 
 - Tasks and connected source data persist online.
-- Click **Đồng bộ** to refresh Canvas and Outlook. The initial connection waits for sync inside the API invocation rather than leaving work running after the response.
+- Click **Đồng bộ Canvas** to refresh Canvas. Direct Outlook remains disabled; use the Gmail bridge. The initial connection waits for sync inside the API invocation rather than leaving work running after the response.
 - One Vercel cron runs daily at `01:00 UTC` (08:00 Vietnam time), subject to the platform's scheduling precision. It refreshes sources and checks reminders. `CRON_SECRET` is validated before any data access.
 - While the app is open and visible, reminders are checked once per minute if enabled. Quiet hours, completed tasks, reminder deduplication and snooze still apply.
-- **When the app is closed, this profile does not guarantee 24-hour or 1-hour reminders.** A once-daily check can miss short windows; do not rely on it as an alarm for exams or submissions. No extra paid scheduler is created.
+- Each member can install the free clock-only Google Apps Script in Settings (no Gmail read scope), or the Gmail bridge which includes it. It wakes every minute and contacts the server at most ten minutes apart away from known reminder windows. No paid scheduler is created; system/network/free-quota delivery limits remain. The daily cron alone is an owner-only fallback, not a member scheduler.
 - Keep Hobby and Neon Free selected. Usage quotas can suspend/restrict service; no plan upgrade is included. Verify current provider limits in your dashboards.
 
 ## Outlook in five steps
@@ -47,3 +48,7 @@ The remote store uses atomic compare-and-swap for concurrent task changes, stabl
 `npm test` runs isolated SQLite tests by default. With `DATABASE_URL` and `ENCRYPTION_KEY` present it also exercises the Neon adapter, using unique `test-*` namespaces so synthetic records cannot appear in the app's normal workspace. Tests cover concurrent updates, lock ownership, authentication, CSRF, pagination and reminder windows. Test namespaces may be pruned from the database independently of application records.
 
 References: [Vercel Hobby](https://vercel.com/docs/plans/hobby), [Vercel cron limits](https://vercel.com/docs/schedules/cron-jobs/usage-and-pricing), [Neon plans](https://neon.com/pricing), [Microsoft app registration](https://learn.microsoft.com/en-us/graph/auth-register-app-v2).
+
+## Public beta authentication
+
+Managed Neon Auth is configured on production with email verification OTP. The beta uses the shared email sender, subject to test/rate limits. A custom SMTP sender is needed before broad production launch. Every account starts with an empty, isolated workspace. The original owner keeps existing Canvas/Gmail/SIS data at `/owner`. Google background setup is per workspace; a script preview is not an active scheduler.

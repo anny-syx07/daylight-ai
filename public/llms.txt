@@ -1,0 +1,18 @@
+# Daylight
+
+> A free beta study PWA for students at UMT, Vietnam. Each user creates a separate account and connects their own sources.
+
+Daylight combines assignments, quizzes, deadlines, class schedules, messages and Web Push reminders. Dashboard charts reflect saved source data. This release does not include generative AI despite the repository's Daylight AI name.
+
+- [Home](https://daylight-ai-three.vercel.app/): public introduction
+- [Start](https://daylight-ai-three.vercel.app/app?signup): email account registration and verification
+- [Guide](https://daylight-ai-three.vercel.app/huong-dan): Canvas, Gmail bridge, schedule import and phone setup
+- [Privacy](https://daylight-ai-three.vercel.app/quyen-rieng-tu)
+- [Terms](https://daylight-ai-three.vercel.app/dieu-khoan)
+- [Source](https://github.com/anny-syx07/daylight-ai)
+
+## Scope and limits
+
+Canvas currently supports umthcm.instructure.com only. Access to particular Canvas resources remains controlled by the university. Gmail uses a user-installed Google Apps Script bridge for messages with the Daylight label; there is no direct Outlook connection yet. The cloud reminder clock must be installed once per workspace. SIS auto-refresh requires the optional local Chrome bridge and an awake, signed-in computer. Imported ICS, EML or SIS snapshots require re-import when changed. Web Push needs permission on each device; iPhone needs a Home Screen installation. Delivery timing and sound depend on the OS, network and free service quotas.
+
+Connect sources inside the authenticated application. Private dashboards and APIs are not public content.

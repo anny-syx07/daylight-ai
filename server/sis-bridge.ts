@@ -1,5 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { get, set, update, seal, secret, remove, claim, release } from './store.js';
+import { get, set, update, seal, secret, remove, claim, release, workspaceId } from './store.js';
+import { registerBridge, unregisterBridge } from './member-auth.js';
 import { parseSisSchedule } from './sis-import.js';
 import { extensionZip } from './sis-extension.js';
 import type { Item, SisCatalog } from '../src/types.js';
@@ -14,9 +15,10 @@ export async function sisSetup(origin: string) {
   if (!catalog) throw new Error('Nhập thời khóa biểu SIS trước nhé.');
   let key = await secret('sis:secret');
   if (!key) { key = randomBytes(32).toString('hex'); await set('sis:secret', seal(key)); }
+  await registerBridge('sis',key,workspaceId());
   return extensionZip({ ...catalog, endpoint: `${origin}/api/imports/sis/receive`, key });
 }
-export async function revokeSis() { await remove('sis:secret'); await remove('sis:status'); }
+export async function revokeSis() { const key=await secret('sis:secret');if(key)await unregisterBridge('sis',key);await remove('sis:secret'); await remove('sis:status'); }
 export async function receiveSis(body: any) {
   if (body && typeof body === 'object' && typeof body.error === 'string') {
     const errors: Record<string, string> = { signin: 'Cần đăng nhập lại SIS trong Chrome.', layout: 'SIS đổi giao diện. Lịch cũ được giữ.', partial: 'Chưa đọc đủ bảng SIS. Lịch cũ được giữ.', unavailable: 'Chưa kiểm tra được SIS. Lịch cũ được giữ.' };

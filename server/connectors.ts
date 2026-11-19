@@ -1,5 +1,5 @@
 import { ConfidentialClientApplication, CryptoProvider } from '@azure/msal-node';
-import { get, set, secret, seal, remove, claim, release, update } from './store.js';
+import { get, set, secret, seal, remove, claim, release, update, workspaceId } from './store.js';
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Item, Connection, Source } from '../src/types.js';
@@ -232,14 +232,15 @@ export async function syncOutlook() {
     }
 }
 export function publicError(error: unknown) { return error instanceof ProviderError ? error.message : 'Chưa tải được dữ liệu. Kiểm tra kết nối và thử lại.'; }
-let running: Promise<void> | null = null;
-export const isSyncing = () => Boolean(running);
+const running = new Map<string,Promise<void>>();
+export const isSyncing = () => running.has(workspaceId());
 export function syncAll() {
-    if (!running) running = (async () => {
+    const workspace=workspaceId();
+    if (!running.has(workspace)) running.set(workspace,(async () => {
         const owner = randomUUID();
         if (!await claim('lock:sync', owner, 280000)) return;
         try { await syncBudget.run(Date.now() + 230000, async () => { await syncCanvas(); await syncOutlook(); }); }
         finally { await release('lock:sync', owner); }
-    })().finally(() => { running = null; });
-    return running;
+    })().finally(() => { running.delete(workspace); }));
+    return running.get(workspace)!;
 }

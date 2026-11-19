@@ -2,12 +2,19 @@ import { neon } from '@neondatabase/serverless';
 import { mkdirSync, readFileSync, writeFileSync, existsSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 const cloud = Boolean(process.env.VERCEL);
 if (cloud && (!process.env.DATABASE_URL || !process.env.ENCRYPTION_KEY)) throw new Error('Vercel requires DATABASE_URL and ENCRYPTION_KEY.');
 const remote = process.env.DATABASE_URL ? neon(process.env.DATABASE_URL) : null;
 const namespace = process.env.STORE_NAMESPACE || '';
-const scoped = (name: string) => name.startsWith(namespace) ? name : namespace + name;
+const workspace = new AsyncLocalStorage<string>();
+export const workspaceId = () => workspace.getStore() || 'owner';
+export function inWorkspace<T>(id: string, work: () => T): T {
+  if (id !== 'owner' && !/^u_[a-f0-9]{64}$/.test(id)) throw new Error('Invalid workspace');
+  return workspace.run(id,work);
+}
+const scoped = (name: string) => { const prefix=namespace+(workspaceId()==='owner'?'':`workspace:${workspaceId()}:`);return name.startsWith(prefix)?name:prefix+name; };
 const directory = process.env.DATA_DIR || '.data';
 if (!remote) mkdirSync(directory, { recursive: true, mode: 0o700 });
 const keyPath = join(directory, 'encryption.key');
@@ -88,3 +95,9 @@ export function unseal(value: string) {
   return Buffer.concat([decipher.update(bytes.subarray(12, -16)), decipher.final()]).toString('utf8');
 }
 export async function secret(name: string): Promise<string | undefined> { const value = await get<string | null>(name, null); return value ? unseal(value) : undefined; }
+export async function eraseMemberData(){
+  if(workspaceId()==='owner')throw Error('Member workspace required');
+  const prefix=namespace+`workspace:${workspaceId()}:`;
+  if(remote){await initialize();await remote.query('DELETE FROM daylight_kv WHERE left(key,length($1))=$1',[prefix]);}
+  else db!.prepare('DELETE FROM kv WHERE substr(key,1,?)=?').run(prefix.length,prefix);
+}
