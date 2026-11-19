@@ -1,0 +1,49 @@
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.connection-help-page{margin:0 auto;padding:28px 24px 0;max-width:900px;min-height:100vh}
+.guide-page-header{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:55px}
+.guide-page-header .brand{font-size:27px}
+.guide-page-heading h1{font-size:36px;line-height:1.5;margin:14px 0}
+.guide-page-heading .eyebrow{display:flex;align-items:center;gap:8px;color:var(--purple)}
+.guide-page-heading>p{color:#857b92;font-size:15px;line-height:1.9;max-width:620px}
+.guide-jump{display:flex;flex-direction:row;gap:12px;flex-wrap:wrap;margin:28px 0}
+.guide-jump a{display:flex;align-items:center;gap:9px;background:var(--soft);color:var(--purple);font-weight:700;font-size:14px;padding:13px 17px;border-radius:12px}
+.guide-section{padding:30px;margin-bottom:25px;scroll-margin-top:20px}
+.guide-section-title{display:flex;gap:15px;align-items:center;margin-bottom:20px}
+.guide-section-title .eyebrow{margin-bottom:6px;font-size:10px}
+.guide-section-title h2{font-size:23px;line-height:1.5}
+.connection-steps{font-size:15px;line-height:1.9;color:var(--text)}
+.connection-steps .guide-intro{margin-bottom:20px;color:#857b92}
+.guide-link{margin:4px 0 12px;white-space:normal;text-align:left;justify-content:flex-start;border-color:#dcd3ec;color:var(--purple);font-size:14px;line-height:1.6}
+.connection-steps ol{padding-left:25px;margin:15px 0 25px}
+.connection-steps ol>li{padding-left:9px;margin-bottom:27px}
+.connection-steps li::marker{color:var(--purple);font-weight:800}
+.connection-steps li>strong{font-size:16px;display:block;margin-bottom:7px}
+.connection-steps p{font-size:14px;line-height:1.9;margin:8px 0;color:#82788d}
+.connection-steps b{font-weight:800;color:var(--text)}
+.guide-callout{padding:14px 18px;border-radius:13px;background:var(--soft);margin-bottom:18px;color:var(--purple)}
+.guide-callout strong{font-size:14px}.guide-callout p{margin:5px 0 0;font-size:13px}
+.guide-copy-field{border:1px solid var(--border);background:var(--bg);padding:14px;border-radius:12px;margin:15px 0}
+.guide-copy-field label{font-size:12px;line-height:1.7;color:#82788d}
+.guide-copy-field input,.guide-copy-field textarea{font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;line-height:1.8;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;width:100%;resize:vertical}
+.guide-copy-field input{min-height:44px}
+.guide-copy-field .secondary{margin-top:10px;font-size:12px}
+.guide-copy-status{display:block;margin-top:5px;color:var(--purple);font-size:12px;line-height:1.8}
+.guide-scopes{padding-left:18px;margin:12px 0}.guide-scopes li{padding:3px 0;font-size:14px}
+.connection-steps code{font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;background:var(--soft);color:var(--purple);padding:3px 5px;border-radius:5px;overflow-wrap:anywhere}
+.guide-mapping{margin:14px 0;padding:8px 16px;background:var(--bg);border:1px solid var(--border);border-radius:12px}
+.guide-mapping>div{padding:12px 0;border-bottom:1px solid var(--border)}.guide-mapping>div:last-child{border-bottom:0}
+.guide-mapping dt{font-weight:700}.guide-mapping dd{font-size:13px;margin:6px 0 0;color:#82788d;line-height:1.8}
+.guide-troubleshoot{padding:14px 17px;border:1px solid var(--border);border-radius:12px;margin:22px 0}
+.guide-troubleshoot summary{cursor:pointer;font-weight:750;font-size:14px;line-height:1.8;color:var(--purple)}
+.connection-steps .guide-source{font-size:12px;margin:18px 0}.guide-source a{display:inline-flex;align-items:center;gap:6px;color:var(--purple);text-decoration:underline;text-underline-offset:3px}
+.guide-page-footer{text-align:center;font-size:13px;color:#a194a7;padding:18px 0 35px}
+.integration-help-links{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:18px;padding-top:17px;border-top:1px solid var(--border)}
+.integration-help-links a{font-size:12px;display:inline-flex;align-items:center;gap:6px;color:var(--purple);line-height:1.7}
+.integration-help-links a:hover{text-decoration:underline;text-underline-offset:3px}
+.canvas-modal-help{margin:18px 0}.canvas-modal-help>summary{font-size:13px;font-weight:700;color:var(--purple);cursor:pointer;line-height:1.8}
+.compact.connection-steps{font-size:13px}.compact.connection-steps p{font-size:12px}.compact.connection-steps li>strong{font-size:13px}.compact.connection-steps ol{padding-left:20px}.compact.connection-steps ol>li{margin-bottom:15px;padding-left:3px}
+.compact.connection-steps .guide-intro{margin-top:12px}.compact .guide-link{font-size:12px;padding:9px 11px}
+.login-card .login-help-link{display:flex;align-items:center;gap:7px;justify-content:center;color:var(--purple);font-size:13px;line-height:1.8;margin-top:22px}
+.login-card .login-password-help{font-size:12px;margin:17px 0 0;line-height:1.9;color:#857b92}.login-password-help a{color:var(--purple);text-decoration:underline;text-underline-offset:3px}.login-password-help code{font-size:11px;overflow-wrap:anywhere}
+[data-theme=dark] .connection-steps p,[data-theme=dark] .guide-intro,[data-theme=dark] .guide-page-heading>p,[data-theme=dark] .guide-mapping dd,[data-theme=dark] .guide-copy-field label{color:#b8adc8}
+@media(max-width:700px){.connection-help-page{padding:20px 16px 0}.guide-page-header{margin-bottom:35px;flex-wrap:wrap}.guide-page-header .brand{font-size:24px}.guide-page-header>.secondary{font-size:12px;padding:10px 12px}.guide-page-heading h1{font-size:29px}.guide-page-heading>p{font-size:14px}.guide-page-heading .eyebrow{font-size:9px}.guide-jump{gap:9px}.guide-jump a{font-size:12px;padding:11px 12px}.guide-section{padding:22px 17px}.guide-section-title{gap:11px}.guide-section-title h2{font-size:19px}.guide-section-title .eyebrow{font-size:8px}.guide-section-title .source-logo.big{width:39px;height:39px}.connection-steps ol{padding-left:19px}.connection-steps ol>li{padding-left:5px}.connection-steps li>strong{font-size:15px}.connection-steps p{font-size:13px}.guide-copy-field{padding:10px}.guide-copy-field input{font-size:11px}.guide-copy-field textarea{font-size:12px}.guide-link{font-size:12px}.guide-mapping{padding:7px 12px}}

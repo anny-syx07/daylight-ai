@@ -4,6 +4,8 @@ A calm personal study PWA: Canvas LMS, school Outlook, deadlines and reminders.
 
 Live app: **https://daylight-ai-three.vercel.app** · Vercel Hobby + Neon Free.
 
+Step-by-step connection help: **https://daylight-ai-three.vercel.app/huong-dan**. Canvas and Outlook instructions include direct new-tab links, a copyable Microsoft redirect URI, and school IT troubleshooting. The same help is linked from sign-in, connection cards and the Canvas token dialog.
+
 ```sh
 npm ci
 cp .env.example .env
