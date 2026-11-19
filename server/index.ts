@@ -6,6 +6,7 @@ import { get, set, remove, seal, update } from './store.js';
 import { allItems, syncAll, isSyncing, validateCanvas, normalizeCanvasToken, ProviderError, disconnect, msal, cryptoProvider, microsoftReady, scopes, origin, publicError } from './connectors.js';
 import { defaultSettings, pushKey, sendReminders } from './reminders.js';
 import type { Item, Connection } from '../src/types.js';
+import { previewImport, commitImport, importStatus, gmailAuthorized, receiveGmail, gmailSetup } from './imports.js';
 const production = process.env.NODE_ENV === 'production';
 const serverless = Boolean(process.env.VERCEL);
 const password = process.env.APP_PASSWORD;
@@ -13,6 +14,7 @@ if (production && (!password || password.length < 16 || !origin.startsWith('http
     throw new Error('Production requires APP_PASSWORD (16+ characters) and HTTPS APP_ORIGIN.');
 const app = express();
 app.disable('x-powered-by');
+app.use('/api/imports/preview', express.json({ limit: '1500kb' }));
 app.use(express.json({ limit: '32kb' }));
 app.use((request, response, next) => {
     response.set({ 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY', 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'", 'Permissions-Policy': 'camera=(), microphone=(), geolocation=()' });
@@ -20,7 +22,7 @@ app.use((request, response, next) => {
         response.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     if (request.path.startsWith('/api'))
         response.set('Cache-Control', 'no-store');
-    if (request.path.startsWith('/api') && !['GET', 'HEAD'].includes(request.method) && request.headers.origin !== origin) {
+    if (request.path.startsWith('/api') && !['GET', 'HEAD'].includes(request.method) && request.headers.origin !== origin && !(request.method === 'POST' && request.path === '/api/imports/gmail/receive')) {
         response.status(403).json({ error: 'Nguồn yêu cầu không hợp lệ.' });
         return;
     }
@@ -46,6 +48,11 @@ app.get('/api/cron', async (request, response) => {
     response.json({ ok: true });
 });
 app.get('/api/session', async (request, response) => response.json({ authenticated: await authorized(request), passwordRequired: Boolean(password) }));
+app.post('/api/imports/gmail/receive', async (request, response) => {
+    if (!await gmailAuthorized(request.headers.authorization)) { response.sendStatus(401); return; }
+    try { response.json(await receiveGmail(request.body)); }
+    catch { response.status(400).json({ error: 'Gói email không hợp lệ hoặc đã đạt giới hạn lưu trữ.' }); }
+});
 app.post('/api/login', async (request, response) => {
     const bucket = await update('login-attempts', { count: 0, reset: 0 }, previous => previous.reset < Date.now() ? { count: 1, reset: Date.now() + 900000 } : { ...previous, count: previous.count + 1 });
     if (bucket.count > 15) {
@@ -71,7 +78,25 @@ app.get('/api/dashboard', async (_request, response) => {
     const raw = [...await allItems(), ...await get<Item[]>('manual', [])];
     const assignments = new Set(raw.filter(item => item.kind === 'assignment' && item.url).map(item => item.url));
     const items = raw.filter(item => !(['quiz', 'discussion'].includes(item.kind) && item.url && assignments.has(item.url))).map(item => ({ ...item, completed: item.completed || completed[item.id] || false }));
-    response.json({ items, connections: { canvas: { ...await get<Connection>('connection:canvas', { connected: false }), diagnostic: await get('canvas:last-check', null) }, outlook: await get<Connection>('connection:outlook', { connected: false }) }, settings: await get('settings', defaultSettings), pushKey, microsoftReady, passwordRequired: Boolean(password), serverless });
+    response.json({ items, connections: { canvas: { ...await get<Connection>('connection:canvas', { connected: false }), diagnostic: await get('canvas:last-check', null) }, outlook: await get<Connection>('connection:outlook', { connected: false }) }, imports: await importStatus(), settings: await get('settings', defaultSettings), pushKey, microsoftReady, passwordRequired: Boolean(password), serverless });
+});
+app.post('/api/imports/preview', async (request, response) => {
+    try { response.json(await previewImport(request.body.filename, request.body.content)); }
+    catch (error) { response.status(400).json({ error: error instanceof Error && /^(Chọn|Tệp|Email|Chỉ|Mỗi|Múi|Lịch)/.test(error.message) ? error.message : 'Chưa đọc được tệp. Hãy xuất lại lịch hoặc email và thử lại.' }); }
+});
+app.post('/api/imports/confirm', async (request, response) => {
+    try { response.json(await commitImport(request.body.id)); }
+    catch (error) { response.status(400).json({ error: error instanceof Error && /^(Bản xem trước|Góc nhập)/.test(error.message) ? error.message : 'Chưa lưu được dữ liệu. Hãy thử lại.' }); }
+});
+app.delete('/api/imports/items/:id', async (request, response) => {
+    await update<Item[]>('imported', [], items => items.filter(item => item.id !== request.params.id));
+    response.json({ ok: true });
+});
+app.get('/api/imports/gmail/setup', async (_request, response) => response.json(await gmailSetup(origin)));
+app.post('/api/imports/gmail/setup', async (_request, response) => response.json(await gmailSetup(origin, true)));
+app.delete('/api/imports/gmail/setup', async (_request, response) => {
+    await remove('gmail:secret'); await remove('gmail:status');
+    response.json({ ok: true });
 });
 app.post('/api/connect/canvas', async (request, response) => {
     if (isSyncing()) {

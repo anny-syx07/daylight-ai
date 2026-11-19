@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.18.0" },
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "scripts": {
     "dev": "concurrently -k \"tsx watch --env-file-if-exists=.env server/index.ts\" \"vite --host 127.0.0.1\"",
     "build": "tsc --noEmit && vite build",
@@ -11,11 +13,13 @@
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
+    "@azure/msal-node": "^7.2.3",
     "@fontsource-variable/nunito": "^5.3.0",
     "@neondatabase/serverless": "^1.0.2",
-    "@azure/msal-node": "^7.2.3",
     "express": "^5.3.0",
     "lucide-react": "^0.468.0",
+    "node-ical": "0.27.6",
+    "postal-mime": "4.2.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "web-push": "^3.6.7"

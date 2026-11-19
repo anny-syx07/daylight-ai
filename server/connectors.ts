@@ -71,7 +71,10 @@ const text = (value: unknown) => String(value || '').replace(/<[^>]*>/g, ' ').re
 async function replacePartition(source: Source, partition: string, items: Item[]) { await set(`items:${source}:${partition}`, items); }
 export async function allItems(): Promise<Item[]> {
     const partitions = await get<string[]>('partitions', []);
-    return (await Promise.all(partitions.map(partition => get<Item[]>(`items:${partition}`, [])))).flat();
+    const upstream = (await Promise.all(partitions.map(partition => get<Item[]>(`items:${partition}`, [])))).flat();
+    const imports = await get<Item[]>('imported', []);
+    const liveUrls = new Set(upstream.filter(item => item.url && item.due).map(item => `${item.url}|${item.due}`));
+    return [...upstream, ...imports.filter(item => !item.url || !item.due || !liveUrls.has(`${item.url}|${item.due}`))];
 }
 async function savePartition(source: Source, partition: string, items: Item[]) {
     await replacePartition(source, partition, items);

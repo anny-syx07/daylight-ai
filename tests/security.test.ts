@@ -98,6 +98,7 @@ test('reminders never invent due dates or notify completed/overdue/non-task item
   assert.equal(reminderWindow({ ...item, due: new Date(now + 7200000).toISOString() }, now), '24h');
   assert.equal(reminderWindow({ ...item, completed: true }, now), null);
   assert.equal(reminderWindow({ ...item, due: null }, now), null);
+  assert.equal(reminderWindow({ ...item, allDay: true }, now), null);
   assert.equal(reminderWindow({ ...item, due: new Date(now - 1).toISOString() }, now), null);
   assert.equal(reminderWindow({ ...item, kind: 'mail' }, now), null);
 });
