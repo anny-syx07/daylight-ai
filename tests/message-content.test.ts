@@ -18,6 +18,10 @@ test('plain text preserves line breaks and URL punctuation; output is bounded an
   const long=formatEmail({html:'<p>'+'nội dung '.repeat(10000)+'</p>'});assert.equal(long.truncated,true);assert.ok(long.runs.map(r=>r.text).join('').length<=18000);assert.ok(long.runs.length<=350);
   assert.equal(formatEmail({snippet:'Legacy preview'}).previewOnly,true);
 });
+test('Microsoft Forms, Google Forms, Teams, Drive and Outlook Safe Links keep their full destination and query',()=>{
+  const links=['https://forms.office.com/Pages/ResponsePage.aspx?id=school&origin=QRCode','https://forms.cloud.microsoft/r/example','https://docs.google.com/forms/d/e/example/viewform?usp=sf_link','https://teams.microsoft.com/l/meetup-join/example?context=school','https://drive.google.com/file/d/example/view?usp=sharing','https://nam01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fforms.office.com%2Fr%2Fexample&data=preserve-this'];
+  for(const href of links){const content=formatEmail({html:`<p>Thông báo học tập</p><a href="${href.replaceAll('&','&amp;')}">Mở liên kết</a>`});assert.equal(content.runs.find(r=>r.href)?.href,href);}
+});
 test('Google bridge decodes MIME bodies, skips attachments, uses revisioned backfill markers and sends actual hrefs',()=>{
   const encode=(s:string)=>Buffer.from(s).toString('base64url');let requested='';const sent:any[]=[];
   const props:Record<string,string>={'sent:abc123':String(Date.now())};
