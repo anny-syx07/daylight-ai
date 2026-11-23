@@ -23,6 +23,7 @@ if (production && (!password || password.length < 16 || !origin.startsWith('http
 const app = express();
 app.disable('x-powered-by');
 app.use('/api/auth',express.raw({type:'*/*',limit:'32kb'}));
+app.use('/api/imports/gmail/receive',express.json({limit:'512kb'}));
 app.use('/api/imports/preview', express.json({ limit: '1500kb' }));
 app.use('/api/imports/sis/receive', express.json({ limit: '1mb' }));
 app.use(express.json({ limit: '32kb' }));

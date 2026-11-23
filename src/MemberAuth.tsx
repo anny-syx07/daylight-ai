@@ -21,7 +21,7 @@ export function MemberAuth({ onSignedIn }: { onSignedIn:()=>Promise<void> }) {
   async function submit(){
     if(mode==='signin'||mode==='signup') {if('serviceWorker' in navigator && 'PushManager' in window){const r=await navigator.serviceWorker.ready;await (await r.pushManager.getSubscription())?.unsubscribe();}}
     if(mode==='signup'){check(await auth.signUp.email({email,password,name}));setMode('verify');setResendAt(Date.now()+60000);setPassword('');return;}
-    if(mode==='signin'){const result=await auth.signIn.email({email,password});if(result.error?.code==='EMAIL_NOT_VERIFIED'){setMode('verify');setResendAt(Date.now()+60000);setPassword('');return;}check(result);await onSignedIn();return;}
+    if(mode==='signin'){const result=await auth.signIn.email({email,password,rememberMe:true});if(result.error?.code==='EMAIL_NOT_VERIFIED'){setMode('verify');setResendAt(Date.now()+60000);setPassword('');return;}check(result);await onSignedIn();return;}
     if(mode==='verify'){check(await auth.$fetch('/email-otp/verify-email',{method:'POST',body:{email,otp}}));setOtp('');await onSignedIn();return;}
     if(mode==='forgot'){await send('forget-password');setMode('reset');setPassword('');return;}
     check(await auth.$fetch('/email-otp/reset-password',{method:'POST',body:{email,otp,password}}));setPassword('');setOtp('');setMode('signin');setMessage('Đã đặt mật khẩu mới. Bạn đăng nhập nhé.');

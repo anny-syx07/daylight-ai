@@ -1,5 +1,5 @@
 export function bridgeCode(config: { endpoint: string; key: string }) {
-  return `// Giữ riêng mã này. Chỉ gửi tiêu đề, người gửi và đoạn trích thư có nhãn Daylight.
+  return `// Giữ riêng mã này. Gửi nội dung và link của thư gắn nhãn Daylight; không gửi tệp đính kèm.
 const DAYLIGHT = ${JSON.stringify(config)};
 
 function setupDaylight() {
@@ -68,16 +68,17 @@ function syncDaylight() {
       if (pageToken) options.pageToken = pageToken;
       const result = Gmail.Users.Messages.list('me', options);
       pages++;
-      const pending = (result.messages || []).filter(m => !sent['sent:' + m.id]).slice(0, 100 - total);
-      for (let offset = 0; offset < pending.length; offset += 5) {
-        const messages = pending.slice(offset, offset + 5).map(m => {
-          const mail = Gmail.Users.Messages.get('me', m.id, { format: 'metadata', metadataHeaders: ['Subject', 'From'] });
+      const pending = (result.messages || []).filter(m => !sent['sent:v2:' + m.id]).slice(0, 100 - total);
+      for (let offset = 0; offset < pending.length; offset += 1) {
+        const messages = pending.slice(offset, offset + 1).map(m => {
+          const mail = Gmail.Users.Messages.get('me', m.id, { format: 'full' });
           const header = name => ((mail.payload || {}).headers || []).find(h => h.name.toLowerCase() === name.toLowerCase());
-          return { id: mail.id, subject: ((header('Subject') || {}).value || '').slice(0, 300), from: ((header('From') || {}).value || '').slice(0, 100), snippet: (mail.snippet || '').slice(0, 1000) };
+          const body = daylightMessageBody(mail.payload);
+          return { ...body, receivedAt: mail.internalDate, id: mail.id, subject: ((header('Subject') || {}).value || '').slice(0, 300), from: ((header('From') || {}).value || '').slice(0, 100), snippet: (mail.snippet || '').slice(0, 1000) };
         });
         daylightSend(messages);
         const done = {};
-        messages.forEach(m => { done['sent:' + m.id] = String(Date.now()); sent['sent:' + m.id] = done['sent:' + m.id]; });
+        messages.forEach(m => { done['sent:v2:' + m.id] = String(Date.now()); sent['sent:v2:' + m.id] = done['sent:v2:' + m.id]; });
         props.setProperties(done);
         total += messages.length;
       }
@@ -85,6 +86,30 @@ function syncDaylight() {
     } while (pageToken && total < 100 && pages < 10);
     if (!total) daylightSend([]);
   } finally { lock.releaseLock(); }
+}
+
+function daylightMessageBody(payload) {
+  const parts = []; let visited = 0;
+  function visit(part) {
+    if (!part || ++visited > 60 || part.filename) return;
+    const headers = part.headers || [];
+    const disposition = headers.find(h => h.name.toLowerCase() === 'content-disposition');
+    if (disposition && /^attachment/i.test(disposition.value || '')) return;
+    if ((part.mimeType === 'text/plain' || part.mimeType === 'text/html') && part.body && part.body.data) {
+      if (part.body.data.length > 200000) { parts.push({ type: part.mimeType, text: '', truncated: true }); return; }
+      const contentType = headers.find(h => h.name.toLowerCase() === 'content-type');
+      const charset = ((contentType || {}).value || '').match(/charset=["']?([^;"' ]+)/i);
+      const blob = Utilities.newBlob(Utilities.base64DecodeWebSafe(part.body.data));
+      let text; try { text = blob.getDataAsString(charset ? charset[1] : 'UTF-8'); } catch (_) { text = blob.getDataAsString('UTF-8'); }
+      const limit = part.mimeType === 'text/html' ? 24000 : 12000;
+      parts.push({ type: part.mimeType, text: text.slice(0, limit), truncated: text.length > limit });
+    }
+    if (part.mimeType !== 'message/rfc822') (part.parts || []).forEach(visit);
+  }
+  visit(payload);
+  const html = parts.find(p => p.type === 'text/html' && p.text);
+  const plain = parts.find(p => p.type === 'text/plain' && p.text);
+  return { bodyHtml: html ? html.text : '', bodyText: plain ? plain.text : '', truncated: parts.some(p => p.truncated) };
 }
 
 function daylightSend(messages) {

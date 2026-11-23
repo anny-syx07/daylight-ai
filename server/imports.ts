@@ -5,6 +5,7 @@ import { get, set, secret, seal, remove, update, workspaceId } from './store.js'
 import { registerBridge, unregisterBridge } from './member-auth.js';
 import type { Item, ImportPreview, ImportStatus } from '../src/types.js';
 import { bridgeCode,reminderClockCode } from './gmail-bridge.js';
+import {formatEmail} from './email-content.js';
 import { parseSisSchedule } from './sis-import.js';
 
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -25,7 +26,8 @@ export async function parseImport(filename: unknown, encoded: unknown, now = Dat
     const email = await PostalMime.parse(bytes);
     if (!email.subject && !email.from?.address) throw new Error('Tệp này không có tiêu đề hoặc người gửi email hợp lệ.');
     const group = `mail:${hash(email.messageId || encoded).slice(0, 32)}`;
-    return { group, label, warnings: ['Email được nhập thủ công. Tệp đính kèm không được lưu; deadline cần bạn xác nhận bằng nút Thêm việc.'], items: [{ id: `import:${group}`, source: 'import', kind: 'mail', title: plain(email.subject || '(Không có tiêu đề)', 300), course: plain(email.from?.name || email.from?.address || 'Email nhập tay', 100), due: null, detail: plain(email.text || email.html), importGroup: group, importLabel: 'Email · nhập thủ công' }] };
+    const content=formatEmail({html:email.html,text:email.text,receivedAt:email.date});
+    return { group, label, warnings: ['Email được nhập thủ công. Tệp đính kèm không được lưu; deadline cần bạn xác nhận bằng nút Thêm việc.'], items: [{ id: `import:${group}`, source: 'import', kind: 'mail', title: plain(email.subject || '(Không có tiêu đề)', 300), course: plain(email.from?.name || email.from?.address || 'Email nhập tay', 100), due: null, detail: content.runs.map(run=>run.text).join('').slice(0,2000),content, importGroup: group, importLabel: 'Email · nhập thủ công' }] };
   }
   if (!/\.ics$/i.test(filename)) throw new Error('Chỉ hỗ trợ lịch .ics, email .eml hoặc thời khóa biểu .sis.json.');
   let content = bytes.toString('utf8').replace(/^\uFEFF/, '');
@@ -103,15 +105,16 @@ export async function receiveGmail(body: unknown) {
   if (!body || typeof body !== 'object' || !('messages' in body) || !Array.isArray(body.messages) || body.messages.length > 20) throw new Error('Gói email không hợp lệ.');
   const items: Item[] = body.messages.map((message: any) => {
     if (!message || typeof message.id !== 'string' || !/^[a-f0-9]{1,40}$/.test(message.id) || typeof message.subject !== 'string' || typeof message.snippet !== 'string') throw new Error('Email không đúng định dạng.');
-    return { id: `import:gmail:${message.id}`, source: 'import', kind: 'mail', title: plain(message.subject || '(Không có tiêu đề)', 300), course: plain(message.from || 'Gmail', 100), due: null, detail: plain(message.snippet), importGroup: 'gmail', importLabel: 'Gmail · nhãn Daylight', url: `https://mail.google.com/mail/u/0/#all/${message.id}` };
+    const content=formatEmail({html:message.bodyHtml,text:message.bodyText,snippet:message.snippet,receivedAt:message.receivedAt,truncated:message.truncated});
+    return { id: `import:gmail:${message.id}`, source: 'import', kind: 'mail', title: plain(message.subject || '(Không có tiêu đề)', 300), course: plain(message.from || 'Gmail', 100), due: null, detail: content.runs.map(run=>run.text).join('').slice(0,2000),content, importGroup: 'gmail', importLabel: 'Gmail · nhãn Daylight', url: `https://mail.google.com/mail/u/0/#all/${message.id}` };
   });
   await update<Item[]>('imported', [], previous => {
     const incoming = new Set(items.map(item => item.id));
-    const next = [...previous.filter(item => !incoming.has(item.id)), ...items];
+    const next = [...previous.filter(item => !incoming.has(item.id)), ...items.map(item=>{const old=previous.find(v=>v.id===item.id);return item.content?.previewOnly&&old?.content&&!old.content.previewOnly?{...item,content:old.content,detail:old.detail}:item;})];
     if (next.length > 5000) throw new Error('Đã đạt giới hạn 5.000 mục nhập.');
     return next;
   });
-  await set('gmail:status', { lastReceived: new Date().toISOString(), receivedCount: items.length });
+  await update<any>('gmail:status',{},status=>({...status,lastReceived:new Date().toISOString(),receivedCount:items.length,...(items.some(i=>!i.content?.previewOnly)?{contentVersion:2}:{} )}));
   return { count: items.length };
 }
 

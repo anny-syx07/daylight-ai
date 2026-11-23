@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Item, Connection, Source } from '../src/types.js';
 import { LEGACY_CANVAS_ORIGIN,normalizeCanvasAddress } from '../src/canvasAddress.js';
+import {formatEmail} from './email-content.js';
 import { canvasFetch,canvasNetworkMessage } from './canvas-network.js';
 export const canvasOrigin = async()=>normalizeCanvasAddress(await get('canvas-origin',LEGACY_CANVAS_ORIGIN));
 const canvasScope = new AsyncLocalStorage<string>();
@@ -173,6 +174,7 @@ async function syncCanvasAtOrigin(canvasBase:string) {
                         due: date(value.due_at || (kind === 'discussion' ? value.assignment?.due_at : null)),
                         url: safeUrl(kind === 'file' ? `${canvasBase}/courses/${course.id}/files/${value.id}` : value.html_url || value.grades?.html_url),
                         detail: kind === 'grade' ? `Điểm: ${value.grades?.current_score ?? 'Chưa công bố'} · Xếp loại: ${value.grades?.current_grade ?? '—'}` : text(value.message || value.description || (kind === 'file' ? `${Math.round((value.size || 0) / 1024)} KB` : '')),
+                        content:!['file','grade'].includes(kind)?formatEmail({html:value.message||value.description||'',receivedAt:value.posted_at||value.created_at}):undefined,
                         completed: Boolean(value.submission?.submitted_at || value.submission?.excused || ['submitted', 'graded'].includes(value.submission?.workflow_state)),
                     })));
                 }
@@ -195,7 +197,7 @@ async function syncCanvasAtOrigin(canvasBase:string) {
             const events = [];
             for (let index = 0; index < contexts.length; index += 20)
                 events.push(...await pages(`/api/v1/calendar_events?${new URLSearchParams([['type', 'event'], ['start_date', start], ['end_date', end], ['per_page', '100'], ...contexts.slice(index, index + 20).map(context => ['context_codes[]', context])])}`, token, 'canvas'));
-            await savePartition('canvas', 'events', [...new Map(events.map(value => [value.id, value])).values()].map(value => ({ id: `canvas:event:${value.id}`, source: 'canvas', kind: 'event', title: text(value.title), due: date(value.start_at), course: value.context_name || 'Canvas', url: safeUrl(value.html_url), detail: text(value.description) })));
+            await savePartition('canvas', 'events', [...new Map(events.map(value => [value.id, value])).values()].map(value => ({ id: `canvas:event:${value.id}`, source: 'canvas', kind: 'event', title: text(value.title), due: date(value.start_at), course: value.context_name || 'Canvas', url: safeUrl(value.html_url), detail: text(value.description),content:formatEmail({html:value.description}) })));
         }
         catch (error) {
             warnings.push(`Lịch: ${publicError(error)}`);

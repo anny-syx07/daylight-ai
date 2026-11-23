@@ -109,7 +109,7 @@ test('Gmail inbound uses an independent encrypted key, deduplicates and reports 
   assert.deepEqual(JSON.parse(setup!.manifest).oauthScopes.filter((x: string) => x.includes('gmail')), ['https://www.googleapis.com/auth/gmail.readonly']);
 });
 
-test('generated Apps Script only exports labelled metadata, retries failures and uses bounded property values', () => {
+test('generated Apps Script exports only labelled messages, retries failures and uses bounded revision markers', () => {
   const sent: Record<string, string> = {};
   let succeed = false;
   let calls = 0;
@@ -122,7 +122,7 @@ test('generated Apps Script only exports labelled metadata, retries failures and
       Labels: { list: () => ({ labels: [{ id: 'label-1', name: 'Daylight' }] }) },
       Messages: {
         list: (_user: string, options: any) => { assert.deepEqual(Array.from(options.labelIds), ['label-1']); return { messages: [{ id: 'abc123' }] }; },
-        get: (_user: string, id: string, options: any) => { assert.equal(options.format, 'metadata'); return { id, snippet: 'Study notice', payload: { headers: [{ name: 'Subject', value: 'Hello' }] } }; },
+        get: (_user: string, id: string, options: any) => { assert.equal(options.format, 'full'); return { id, snippet: 'Study notice', payload: { headers: [{ name: 'Subject', value: 'Hello' }] } }; },
       },
     } },
     UrlFetchApp: { fetch: (_url: string, options: any) => { calls++; forwarded = JSON.parse(options.payload); return { getResponseCode: () => succeed ? 200 : 500 }; } },
@@ -132,7 +132,7 @@ test('generated Apps Script only exports labelled metadata, retries failures and
   assert.deepEqual(sent, {});
   succeed = true; context.syncDaylight();
   assert.equal(forwarded.messages[0].id, 'abc123');
-  assert.equal(typeof sent['sent:abc123'], 'string');
+  assert.equal(typeof sent['sent:v2:abc123'], 'string');
   context.syncDaylight();
   assert.equal(forwarded.messages.length, 0);
   assert.equal(calls, 3);

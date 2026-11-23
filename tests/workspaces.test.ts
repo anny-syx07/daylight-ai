@@ -10,7 +10,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 test('owner and two independently authenticated members isolate items, inbound bridges and logout under concurrent requests',async()=>{
   const directory=mkdtempSync(join(tmpdir(),'daylight-tenants-'));
   const forwarded:string[]=[];
+  let authUnavailable=false;
   const auth=createServer((request,response)=>{
+    if(authUnavailable){response.writeHead(503,{'Content-Type':'application/json'});response.end('{"message":"Temporarily unavailable"}');return;}
     const cookie=request.headers.cookie || '';forwarded.push(cookie);
     const id=cookie.includes('member-a')?'member-a':cookie.includes('member-b')?'member-b':null;
     response.setHeader('Content-Type','application/json');
@@ -62,6 +64,12 @@ test('owner and two independently authenticated members isolate items, inbound b
     assert.equal((await fetch(origin+'/api/imports/gmail/receive',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${keyA}`},body:JSON.stringify({messages:[]})})).status,401);
     assert.equal((await request('/api/dashboard',owner+'; __Secure-neon-auth.session_token=invalid')).status,401,'invalid member session cannot fall back to owner');
     assert.ok(forwarded.every(v=>!v.includes('daylight=')),'owner credential is never forwarded to auth provider');
+    authUnavailable=true;
+    assert.equal((await request('/api/dashboard',a)).status,503,'provider outage must not become a signed-out 401');
+    assert.equal((await request('/api/session',a)).status,503,'do not claim authenticated:false during a provider outage');
+    assert.equal((await request('/api/dashboard',owner)).status,200);
+    authUnavailable=false;
+    assert.equal((await request('/api/dashboard',a)).status,200,'same member cookie works again after provider recovers');
     await request('/api/logout',a,'POST',{});
     assert.equal((await request('/api/dashboard',a)).status,401);
     assert.equal((await request('/api/dashboard',b)).status,200);

@@ -23,6 +23,7 @@ export async function memberIdentity(request: ExpressRequest,response: ExpressRe
     setCookie:(name,value,options)=>{response.append('Set-Cookie',serializeSetCookie({name,value,...options}));},
   })});
   const result=await auth.getSession();
+  if(result.error){if([401,403].includes(result.error.status))return null;throw Error('Authentication service temporarily unavailable');}
   const user=result.data?.user;
   if(!user?.id || !user.emailVerified) return null;
   return {workspace:memberWorkspace(user.id),name:user.name || 'Bạn',email:user.email,kind:'member' as const};
