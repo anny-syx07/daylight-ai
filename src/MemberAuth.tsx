@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { createAuthClient } from '@neon/auth';
-import { ArrowLeft, ArrowUpRight } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Mail, LockKeyhole, UserRound, KeyRound } from 'lucide-react';
+
+import {DaylightScene,BusyMark} from './DaylightVisuals';
 
 const auth = createAuthClient(`${location.origin}/api/auth`);
 type Mode = 'signin' | 'signup' | 'verify' | 'forgot' | 'reset';
@@ -26,14 +28,14 @@ export function MemberAuth({ onSignedIn }: { onSignedIn:()=>Promise<void> }) {
     if(mode==='forgot'){await send('forget-password');setMode('reset');setPassword('');return;}
     check(await auth.$fetch('/email-otp/reset-password',{method:'POST',body:{email,otp,password}}));setPassword('');setOtp('');setMode('signin');setMessage('Đã đặt mật khẩu mới. Bạn đăng nhập nhé.');
   }
-  return <main className="public-auth"><a className="back-link" href="/"><ArrowLeft size={16}/>Daylight</a><section className="auth-card"><img src="/icon.svg" alt="" width="60"/><p className="eyebrow">A LITTLE CLARITY, EVERY DAY</p><h1>{title}</h1><p>{mode==='verify'||mode==='reset'?`Nhập mã gửi đến ${email}. Kiểm tra cả mục Spam.`:'Hôm nay, chỉ cần tiến thêm một chút.'}</p>
+  return <main className="public-auth"><a className="back-link" href="/"><ArrowLeft size={16}/>Daylight</a><section className="auth-card"><DaylightScene/><p className="eyebrow">A LITTLE CLARITY, EVERY DAY</p><h1>{title}</h1><p>{mode==='verify'||mode==='reset'?`Nhập mã gửi đến ${email}. Kiểm tra cả mục Spam.`:'Hôm nay, chỉ cần tiến thêm một chút.'}</p>
     <form onSubmit={e=>{e.preventDefault();void run(submit);}}>
-      {mode==='signup'&&<label>Tên bạn<input autoComplete="name" maxLength={80} required value={name} onChange={e=>setName(e.target.value)}/></label>}
-      {!['verify','reset'].includes(mode)&&<label>Email tài khoản Daylight<input type="email" autoComplete="email" maxLength={254} required value={email} onChange={e=>setEmail(e.target.value.trim())}/></label>}
-      {['verify','reset'].includes(mode)&&<label>Mã xác minh<input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g,''))}/></label>}
-      {['signin','signup','reset'].includes(mode)&&<label>{mode==='reset'?'Mật khẩu Daylight mới':'Mật khẩu Daylight'}<input type="password" autoComplete={mode==='signin'?'current-password':'new-password'} minLength={mode==='signin'?1:12} maxLength={128} required value={password} onChange={e=>setPassword(e.target.value)}/>{mode!=='signin'&&<small>Ít nhất 12 ký tự.</small>}</label>}
+      {mode==='signup'&&<label><span><UserRound size={16}/>Tên bạn</span><input autoComplete="name" maxLength={80} required value={name} onChange={e=>setName(e.target.value)}/></label>}
+      {!['verify','reset'].includes(mode)&&<label><span><Mail size={16}/>Email tài khoản Daylight</span><input type="email" autoComplete="email" maxLength={254} required value={email} onChange={e=>setEmail(e.target.value.trim())}/></label>}
+      {['verify','reset'].includes(mode)&&<label><span><KeyRound size={16}/>Mã xác minh</span><input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g,''))}/></label>}
+      {['signin','signup','reset'].includes(mode)&&<label><span><LockKeyhole size={16}/>{mode==='reset'?'Mật khẩu Daylight mới':'Mật khẩu Daylight'}</span><input type="password" autoComplete={mode==='signin'?'current-password':'new-password'} minLength={mode==='signin'?1:12} maxLength={128} required value={password} onChange={e=>setPassword(e.target.value)}/>{mode!=='signin'&&<small>Ít nhất 12 ký tự.</small>}</label>}
       {mode==='signup'&&<label className="consent"><input type="checkbox" required/><span>Tôi đồng ý <a href="/dieu-khoan" target="_blank" rel="noopener noreferrer">điều khoản</a> và <a href="/quyen-rieng-tu" target="_blank" rel="noopener noreferrer">quyền riêng tư</a>.</span></label>}
-      <button className="primary" disabled={busy}>{busy?'Đang xử lý…':mode==='signup'?'Tạo tài khoản':mode==='signin'?'Vào Daylight':mode==='forgot'?'Gửi mã':'Xác nhận'}<ArrowUpRight size={18}/></button>
+      <button className="primary" disabled={busy}>{busy&&<BusyMark/>}{busy?'Đang xử lý…':mode==='signup'?'Tạo tài khoản':mode==='signin'?'Vào Daylight':mode==='forgot'?'Gửi mã':'Xác nhận'}{!busy&&<ArrowUpRight size={18}/>}</button>
     </form>{message&&<p role="status" className="notice">{message}</p>}
     {mode==='signin'&&<><button className="text-button" disabled={busy} onClick={()=>{setMode('forgot');setMessage('');}}>Quên mật khẩu?</button><p>Chưa có tài khoản? <button className="text-button" disabled={busy} onClick={()=>{setMode('signup');setMessage('');}}>Đăng ký miễn phí</button></p></>}
     {mode==='signup'&&<p>Đã có tài khoản? <button className="text-button" disabled={busy} onClick={()=>{setMode('signin');setMessage('');}}>Đăng nhập</button></p>}
