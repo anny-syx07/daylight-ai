@@ -22,6 +22,7 @@ import { syncHealth, itemSyncFlag } from './syncHealth';
 import { dayKey, itemDayKey } from './studyModel';
 
 import {createApi} from './api';
+import {loginMode,readLoginMode,rememberLoginMode,requestedLoginMode,type LoginMode} from './loginMode';
 const api=createApi();
 const names: Record<Kind, string> = { assignment: 'Bài tập', quiz: 'Kiểm tra', discussion: 'Thảo luận', announcement: 'Thông báo', grade: 'Điểm số', file: 'Tài liệu', event: 'Lịch học', mail: 'Email', task: 'Cá nhân' };
 const taskKinds = ['assignment', 'quiz', 'discussion', 'task'];
@@ -33,8 +34,9 @@ function App() {
   const sessionGeneration=useRef(0);
   const loadPending=useRef<{generation:number;promise:Promise<void>}|null>(null);
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [selectedLoginMode,setSelectedLoginMode]=useState<LoginMode>(()=>loginMode(location.pathname,location.search,readLoginMode()));
   const [account,setAccount]=useState<{name:string;kind:string}|null>(null);
-  const refreshSession=async()=>{const result=await api('/session');sessionGeneration.current++;setAccount(result.user);setAuthenticated(result.authenticated);return result.authenticated;};
+  const refreshSession=async()=>{const result=await api('/session');sessionGeneration.current++;const requested=requestedLoginMode(location.pathname,location.search);if(result.authenticated&&requested&&result.user?.kind!==requested){setAccount(null);setAuthenticated(false);setSelectedLoginMode(requested);return false;}if(result.authenticated&&(result.user?.kind==='owner'||result.user?.kind==='member')){rememberLoginMode(result.user.kind);setSelectedLoginMode(result.user.kind);}setAccount(result.user);setAuthenticated(result.authenticated);return result.authenticated;};
   const [data, setData] = useState<Dashboard | null>(null);
   const [page, setPage] = useState(() => new URLSearchParams(location.search).get('page') === 'connections' ? 'connections' : 'home');
   const [modal, setModal] = useState<'canvas' | 'task' | null>(null);
@@ -84,8 +86,8 @@ function App() {
     await api('/settings', 'PATCH', { reminders: true });
   }
   if (authenticated === null) return <div className="loading"><Sun size={38}/><p>{message || 'Đang mở một ngày nhẹ nhàng…'}</p>{message&&<button onClick={()=>void refreshSession().catch(()=>setMessage('Chưa có kết nối. Thử lại khi mạng ổn nhé.'))}>Thử lại</button>}</div>;
-  if (!authenticated && location.pathname!=='/owner') return <MemberAuth onSignedIn={refreshSession}/>;
-  if (!authenticated) return <div className="login"><div className="login-card"><img src="/icon.svg" width="64" alt=""/><p className="eyebrow">YOUR LITTLE STUDY SPACE</p><h1>Chào mừng về<br/>với Daylight.</h1><p>Đăng nhập để mở góc học tập của riêng bạn.</p><form onSubmit={async event => { event.preventDefault(); const form = new FormData(event.currentTarget); try { await api('/login', 'POST', { password: form.get('password') }); await refreshSession(); } catch (error) { setMessage((error as Error).message); } }}><label>Mật khẩu ứng dụng<input name="password" type="password" autoComplete="current-password" required autoFocus/></label><button className="primary">Mở Daylight <ArrowUpRight size={18}/></button></form><p className="login-password-help">Dùng mật khẩu riêng của Daylight. Bạn có thể xem dòng <code>APP_PASSWORD</code> trong <a href={connectionLinks.environment} target="_blank" rel="noopener noreferrer">cấu hình Vercel (mở tab mới)</a>.</p><a className="login-help-link" href="/huong-dan" target="_blank" rel="noopener noreferrer"><BookOpen size={16}/>Hướng dẫn kết nối Canvas & Outlook · mở tab mới</a>{message && <p role="alert">{message}</p>}</div><Sun className="login-sun"/></div>;
+  if (!authenticated && selectedLoginMode!=='owner') return <MemberAuth onSignedIn={refreshSession}/>;
+  if (!authenticated) return <div className="login"><div className="login-card"><img src="/icon.svg" width="64" alt=""/><p className="eyebrow">YOUR LITTLE STUDY SPACE</p><h1>Chào mừng về<br/>với Daylight.</h1><p>Mở lại góc học tập cũ bằng mật khẩu ứng dụng Daylight.</p><form onSubmit={async event => { event.preventDefault(); const form = new FormData(event.currentTarget); try { await api('/login', 'POST', { password: form.get('password') }); await refreshSession(); } catch (error) { setMessage((error as Error).message); } }}><label>Mật khẩu ứng dụng Daylight<input name="password" type="password" autoComplete="current-password" required autoFocus/></label><button className="primary">Mở Daylight <ArrowUpRight size={18}/></button></form><p className="login-password-help">Dùng mật khẩu riêng của Daylight. Bạn có thể xem dòng <code>APP_PASSWORD</code> trong <a href={connectionLinks.environment} target="_blank" rel="noopener noreferrer">cấu hình Vercel (mở tab mới)</a>.</p><a className="legacy-login-link" href="/app?login=member">Đăng nhập bằng tài khoản email Daylight ↗</a><a className="login-help-link" href="/huong-dan" target="_blank" rel="noopener noreferrer"><BookOpen size={16}/>Hướng dẫn kết nối Canvas & Outlook · mở tab mới</a>{message && <p role="alert">{message}</p>}</div><Sun className="login-sun"/></div>;
   if (!data) return <div className="loading"><Sun/><p>{message || 'Đang tải góc học tập…'}</p><button onClick={load}>Thử lại</button></div>;
   const pending = data.items.filter(item => taskKinds.includes(item.kind) && !item.completed).sort((first, second) => (first.due ? Date.parse(first.due) : Infinity) - (second.due ? Date.parse(second.due) : Infinity));
   const health = syncHealth({ canvas: data.connections.canvas, imports: data.imports, clock: data.reminderClock, automation: data.automation, remindersEnabled: data.settings.reminders, notifications: data.notifications });

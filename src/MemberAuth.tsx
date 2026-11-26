@@ -29,9 +29,9 @@ export function MemberAuth({ onSignedIn }: { onSignedIn:()=>Promise<void> }) {
   return <main className="public-auth"><a className="back-link" href="/"><ArrowLeft size={16}/>Daylight</a><section className="auth-card"><img src="/icon.svg" alt="" width="60"/><p className="eyebrow">A LITTLE CLARITY, EVERY DAY</p><h1>{title}</h1><p>{mode==='verify'||mode==='reset'?`Nhập mã gửi đến ${email}. Kiểm tra cả mục Spam.`:'Hôm nay, chỉ cần tiến thêm một chút.'}</p>
     <form onSubmit={e=>{e.preventDefault();void run(submit);}}>
       {mode==='signup'&&<label>Tên bạn<input autoComplete="name" maxLength={80} required value={name} onChange={e=>setName(e.target.value)}/></label>}
-      {!['verify','reset'].includes(mode)&&<label>Email<input type="email" autoComplete="email" maxLength={254} required value={email} onChange={e=>setEmail(e.target.value.trim())}/></label>}
+      {!['verify','reset'].includes(mode)&&<label>Email tài khoản Daylight<input type="email" autoComplete="email" maxLength={254} required value={email} onChange={e=>setEmail(e.target.value.trim())}/></label>}
       {['verify','reset'].includes(mode)&&<label>Mã xác minh<input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g,''))}/></label>}
-      {['signin','signup','reset'].includes(mode)&&<label>{mode==='reset'?'Mật khẩu mới':'Mật khẩu'}<input type="password" autoComplete={mode==='signin'?'current-password':'new-password'} minLength={mode==='signin'?1:12} maxLength={128} required value={password} onChange={e=>setPassword(e.target.value)}/>{mode!=='signin'&&<small>Ít nhất 12 ký tự.</small>}</label>}
+      {['signin','signup','reset'].includes(mode)&&<label>{mode==='reset'?'Mật khẩu Daylight mới':'Mật khẩu Daylight'}<input type="password" autoComplete={mode==='signin'?'current-password':'new-password'} minLength={mode==='signin'?1:12} maxLength={128} required value={password} onChange={e=>setPassword(e.target.value)}/>{mode!=='signin'&&<small>Ít nhất 12 ký tự.</small>}</label>}
       {mode==='signup'&&<label className="consent"><input type="checkbox" required/><span>Tôi đồng ý <a href="/dieu-khoan" target="_blank" rel="noopener noreferrer">điều khoản</a> và <a href="/quyen-rieng-tu" target="_blank" rel="noopener noreferrer">quyền riêng tư</a>.</span></label>}
       <button className="primary" disabled={busy}>{busy?'Đang xử lý…':mode==='signup'?'Tạo tài khoản':mode==='signin'?'Vào Daylight':mode==='forgot'?'Gửi mã':'Xác nhận'}<ArrowUpRight size={18}/></button>
     </form>{message&&<p role="status" className="notice">{message}</p>}
@@ -39,6 +39,8 @@ export function MemberAuth({ onSignedIn }: { onSignedIn:()=>Promise<void> }) {
     {mode==='signup'&&<p>Đã có tài khoản? <button className="text-button" disabled={busy} onClick={()=>{setMode('signin');setMessage('');}}>Đăng nhập</button></p>}
     {['verify','reset'].includes(mode)&&<button className="text-button" disabled={busy} onClick={()=>void run(async()=>{await send(mode==='verify'?'email-verification':'forget-password');setMessage('Đã gửi lại mã.');})}>Gửi lại mã</button>}
     {!['signin','signup'].includes(mode)&&<button className="text-button" disabled={busy} onClick={()=>{setMode('signin');setOtp('');setPassword('');setMessage('');}}>Về đăng nhập</button>}
+    <p className="privacy-note">Dùng mật khẩu bạn đã tạo riêng cho Daylight. Daylight không yêu cầu mật khẩu Gmail.</p>
+    <a className="legacy-login-link" href="/owner">Mở góc học tập cũ bằng mật khẩu ứng dụng ↗</a>
     <p className="privacy-note">Bản dùng thử miễn phí · email xác minh có thể chậm hoặc chạm giới hạn gửi.</p>
   </section></main>;
 }

@@ -41,18 +41,27 @@ app.use((request, response, next) => {
 });
 const digest = (value: string) => createHash('sha256').update(value).digest();
 const cookieName = production ? '__Host-daylight' : 'daylight';
+const ownerSessionAge=7*86400000;
 function sessionId(request: express.Request) { return request.headers.cookie?.split(';').map(value => value.trim()).find(value => value.startsWith(`${cookieName}=`))?.slice(cookieName.length + 1) || ''; }
-async function authorized(request: express.Request) {
+async function authorized(request: express.Request,response:express.Response) {
     if (!password)
         return true;
     const value = await get<{
         expires: number;
     } | null>(`session:${digest(sessionId(request)).toString('hex')}`, null);
-    return Boolean(value && value.expires > Date.now());
+    if(!value||value.expires<=Date.now())return false;
+    // Renew the same seven-day window at most daily, only while still valid.
+    // Re-check atomically so a concurrent logout cannot resurrect a session.
+    if(value.expires<Date.now()+ownerSessionAge-86400000){
+        const renewed=await update<{expires:number}|null>(`session:${digest(sessionId(request)).toString('hex')}`,null,current=>current&&current.expires>Date.now()?{expires:Date.now()+ownerSessionAge}:null);
+        if(!renewed)return false;
+        response.cookie(cookieName,sessionId(request),{httpOnly:true,secure:production,sameSite:'lax',path:'/',maxAge:ownerSessionAge});
+    }
+    return true;
 }
 async function identity(request:express.Request,response:express.Response) {
     if(hasMemberCookie(request)) return memberIdentity(request,response);
-    if(await inWorkspace('owner',()=>authorized(request))) return {workspace:'owner',name:'Góc nhỏ của bạn',kind:'owner' as const};
+    if(await inWorkspace('owner',()=>authorized(request,response))) return {workspace:'owner',name:'Góc nhỏ của bạn',kind:'owner' as const};
     return null;
 }
 app.all('/api/auth/{*path}', async(request,response)=>{
@@ -109,8 +118,8 @@ app.post('/api/login', async (request, response) => {
     await remove('login-attempts');
     await revokeMemberSession(request);clearMemberCookies(request,response);
     const session = randomBytes(32).toString('hex');
-    await set(`session:${digest(session).toString('hex')}`, { expires: Date.now() + 7 * 86400000 });
-    response.cookie(cookieName, session, { httpOnly: true, secure: production, sameSite: 'lax', path: '/', maxAge: 7 * 86400000 }).json({ ok: true });
+    await set(`session:${digest(session).toString('hex')}`, { expires: Date.now() + ownerSessionAge });
+    response.cookie(cookieName, session, { httpOnly: true, secure: production, sameSite: 'lax', path: '/', maxAge: ownerSessionAge }).json({ ok: true });
 });
 app.use('/api', async (request, response, next) => { let user;try{user=await identity(request,response);}catch{response.status(503).json({error:'Chưa kiểm tra được phiên đăng nhập.'});return;} if (!user) {
     response.status(401).json({ error: 'Hãy đăng nhập để tiếp tục.' });
